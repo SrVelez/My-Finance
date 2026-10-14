@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Valores monetários sempre em centavos inteiros. `fundId` é reservado para os Fundos (V2).
+
+model User {
+  id                 String        @id @default(cuid())
+  name               String
+  weeklyLivingCents  Int
+  weekStartDay       Int           @default(1) // 0 = domingo … 6 = sábado
+  onboarded          Boolean       @default(false)
+  bills              Bill[]
+  goals              Goal[]
+  transactions       Transaction[]
+  createdAt          DateTime      @default(now())
+}
+
+model Bill {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundId       String?
+  name         String
+  amountCents  Int
+  dueDay       Int
+  savedCents   Int           @default(0)
+  // Último vencimento (yyyy-mm-dd) já dado como pago/consumido; null = nenhum.
+  paidThrough  String?
+  // Saldo consumido ao considerar o vencimento pago (permite "Não foi pago").
+  consumedCents Int         @default(0)
+  // Vencimento marcado como "Não foi pago".
+  unpaidDue    String?
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Goal {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundId       String?
+  name         String
+  targetCents  Int
+  savedCents   Int           @default(0)
+  deadline     String? // yyyy-mm
+  weeklyCents  Int           @default(0)
+  priority     Int
+  isEmergency  Boolean       @default(false)
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // income | expense | allocation | withdrawal | bill_payment
+  type        String
+  amountCents Int
+  category    String?
+  date        DateTime
+  note        String?
+  // Liga o recebimento às alocações/retiradas geradas por ele (extrato).
+  groupId     String?
+  billId      String?
+  bill        Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
+  goalId      String?
+  goal        Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, date])
+}

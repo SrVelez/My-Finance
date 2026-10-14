@@ -1,0 +1,121 @@
+import Link from "next/link";
+import { Suspense } from "react";
+import { Button } from "@/components/ui/Button";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { formatDateChip, weekdayShort } from "@/lib/engine";
+import { formatEUR } from "@/lib/money";
+import { listBills } from "@/lib/services/bills";
+import { serverToday } from "@/lib/services/today";
+import { markPaidAction, markUnpaidAction } from "./actions";
+
+export default function ContasPage() {
+  return (
+    <Suspense fallback={<main className="flex-1" aria-busy />}>
+      <Contas />
+    </Suspense>
+  );
+}
+
+const dueLabel = (due: string) => `${weekdayShort(due).toLowerCase()}, ${formatDateChip(due, "")}`;
+
+async function Contas() {
+  const today = await serverToday();
+  const { totalCents, upcoming, justDue } = await listBills(today);
+  const toPay = upcoming.filter((b) => b.overdue);
+  const next = upcoming.filter((b) => !b.overdue);
+
+  return (
+    <main className="flex-1 space-y-6 px-5 pt-5 pb-6">
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-extrabold">Contas</h1>
+          <p className="mt-1 text-xs text-muted">
+            {formatEUR(totalCents)} por mês · {upcoming.length} {upcoming.length === 1 ? "conta fixa" : "contas fixas"}
+          </p>
+        </div>
+        <Link
+          href="/contas/nova"
+          aria-label="Nova conta"
+          className="flex size-11 items-center justify-center rounded-full bg-brand text-2xl font-bold text-white"
+        >
+          +
+        </Link>
+      </header>
+
+      {upcoming.length === 0 && <p className="text-sm text-muted">Nenhuma conta ainda. Toque em + para adicionar.</p>}
+
+      {toPay.length > 0 && (
+        <Section title="A PAGAR">
+          {toPay.map((b) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 rounded-card border border-accent/50 bg-warn-bg p-4">
+              <Link href={`/contas/${b.id}`} className="min-w-0">
+                <span className="block font-semibold">
+                  {b.name} · {formatEUR(b.amountCents)}
+                </span>
+                <span className="block text-xs text-warn-ink">Venceu {formatDateChip(b.due, "")} · não foi pago</span>
+              </Link>
+              <form action={markPaidAction.bind(null, b.id)}>
+                <Button variant="outline" className="w-auto min-h-11 px-3 text-sm">
+                  Paguei
+                </Button>
+              </form>
+            </li>
+          ))}
+        </Section>
+      )}
+
+      {next.length > 0 && (
+        <Section title="PRÓXIMAS">
+          {next.map((b) => (
+            <li key={b.id}>
+              <Link href={`/contas/${b.id}`} className="block space-y-2 rounded-card border border-line bg-surface p-4">
+                <span className="flex items-start justify-between">
+                  <span>
+                    <span className="block font-semibold">{b.name}</span>
+                    <span className="block text-xs text-muted">Vence {dueLabel(b.due)}</span>
+                  </span>
+                  <span className="text-lg font-extrabold">{formatEUR(b.amountCents)}</span>
+                </span>
+                <ProgressBar label={`Guardado para ${b.name}`} value={b.savedCents} max={b.amountCents} />
+                <span className={`block text-xs ${b.covered ? "font-semibold text-brand" : "text-muted"}`}>
+                  {b.covered
+                    ? "✓ Valor todo guardado"
+                    : `${formatEUR(b.savedCents)} guardados · faltam ${formatEUR(b.amountCents - b.savedCents)}`}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </Section>
+      )}
+
+      {justDue.length > 0 && (
+        <Section title="JÁ VENCERAM">
+          {justDue.map((b) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
+              <span>
+                <span className="block font-semibold">
+                  {b.name} · {formatEUR(b.amountCents)}
+                </span>
+                <span className="block text-xs text-muted">{formatDateChip(b.paidThrough, "")} · considerado pago</span>
+              </span>
+              <form action={markUnpaidAction.bind(null, b.id)}>
+                <Button variant="outline" className="w-auto min-h-11 px-3 text-sm">
+                  Não foi pago
+                </Button>
+              </form>
+            </li>
+          ))}
+        </Section>
+      )}
+    </main>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-2 text-[11px] font-semibold tracking-wider text-muted">{title}</h2>
+      <ul className="space-y-3">{children}</ul>
+    </section>
+  );
+}
