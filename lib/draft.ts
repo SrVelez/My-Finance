@@ -62,6 +62,8 @@ export function toEngineState(draft: OnboardingDraft, today: string): EngineStat
       paidThrough: null,
       consumedCents: 0,
       unpaidDue: null,
+      unpaidCents: 0,
+      confirmedThrough: null,
       createdOn: today,
     })),
     goals: draft.goals.map((g, i) => ({

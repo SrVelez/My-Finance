@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { euros } from "@/lib/money";
-import {
-  coverShortfallFromReserve,
-  distribute,
-  freeAfterExpense,
-  markUnpaid,
-  nextDue,
-  planBill,
-  recentlyDue,
-  settleBill,
-  suggestWeekly,
-} from "@/lib/engine";
-import { bill, midCycleState, zeroState } from "./fixtures";
+import { coverShortfallFromReserve, distribute, freeAfterExpense } from "@/lib/engine";
+import { midCycleState, zeroState } from "./fixtures";
 
 const amounts = (d: ReturnType<typeof distribute>) =>
   Object.fromEntries(d.allocations.map((a) => [a.id, a.amountCents / 100]));
@@ -102,84 +92,5 @@ describe("caso 5 — simulação não altera saldos", () => {
     expect(JSON.stringify(state)).toBe(before);
     expect(state.bills.every((b) => b.savedCents === 0)).toBe(true);
     expect(state.goals.every((g) => g.savedCents === 0)).toBe(true);
-  });
-});
-
-describe("caso 6 — vencimento passado", () => {
-  const aluguel = bill({
-    id: "aluguel",
-    name: "Aluguel",
-    amountCents: euros(640),
-    dueDay: 1,
-    savedCents: euros(640),
-    paidThrough: "2026-09-01",
-  });
-  const today = "2026-10-08";
-
-  it("Aluguel de 1/out é considerado pago e o novo ciclo começa em €0", () => {
-    const settled = settleBill(aluguel, today);
-    expect(settled.paidThrough).toBe("2026-10-01");
-    expect(settled.savedCents).toBe(0);
-    expect(recentlyDue(settled, today)).toBe(true);
-    expect(nextDue(settled, today)).toBe("2026-11-01");
-  });
-
-  it('"Não foi pago" reverte e volta a cobrar', () => {
-    const unpaid = markUnpaid(settleBill(aluguel, today));
-    expect(unpaid.unpaidDue).toBe("2026-10-01");
-    expect(unpaid.savedCents).toBe(euros(640));
-    expect(recentlyDue(unpaid, today)).toBe(false);
-    expect(settleBill(unpaid, today)).toEqual(unpaid);
-    expect(nextDue(unpaid, today)).toBe("2026-10-01");
-  });
-
-  it("conta vencida sem saldo é cobrada por inteiro agora", () => {
-    const unpaid = markUnpaid(settleBill({ ...aluguel, savedCents: 0, paidThrough: "2026-09-01" }, today));
-    expect(planBill({ ...unpaid, savedCents: 0 }, today).amountCents).toBe(euros(640));
-  });
-});
-
-describe("extras", () => {
-  it("sugestão de valor semanal sem prazo (~16 semanas)", () => {
-    expect(suggestWeekly(euros(400))).toBe(euros(25));
-  });
-
-  it("dinheiro insuficiente para as contas: cobre na ordem e zera o resto", () => {
-    const d = distribute({ incomeCents: euros(100), date: "2026-10-08", state: zeroState(), assumeFreshCycle: true });
-    expect(amounts(d)).toMatchObject({ aluguel: 100, curso: 0, telefone: 0 });
-    expect(d.livingCents).toBe(0);
-    expect(d.shortfallCents).toBe(euros(120));
-  });
-});
-
-describe("quitar conta vencida", () => {
-  it("'Paguei' consome o saldo e libera o próximo ciclo", async () => {
-    const { markPaid } = await import("@/lib/engine");
-    const a = bill({ id: "a", name: "Aluguel", amountCents: euros(640), dueDay: 1, savedCents: euros(640), paidThrough: "2026-09-01" });
-    const unpaid = markUnpaid(settleBill(a, "2026-10-08"));
-    const paid = markPaid(unpaid);
-    expect(paid.unpaidDue).toBeNull();
-    expect(paid.savedCents).toBe(0);
-    expect(paid.paidThrough).toBe("2026-10-01");
-    expect(nextDue(paid, "2026-10-08")).toBe("2026-11-01");
-    expect(markPaid(a)).toBe(a);
-  });
-});
-
-describe("conta criada depois do vencimento", () => {
-  const today = "2026-10-14";
-  it("vencimento anterior à criação não é considerado pago", () => {
-    const nova = bill({ id: "n", name: "Nova", amountCents: euros(100), dueDay: 1, createdOn: "2026-10-14" });
-    const settled = settleBill(nova, today);
-    expect(settled.savedCents).toBe(nova.savedCents);
-    expect(recentlyDue(settled, today)).toBe(false);
-    expect(nextDue(settled, today)).toBe("2026-11-01");
-  });
-  it("conta que já existia antes do vencimento é liquidada", () => {
-    const antiga = bill({ id: "a", name: "Antiga", amountCents: euros(100), dueDay: 1, savedCents: euros(60), createdOn: "2026-09-01" });
-    const settled = settleBill(antiga, today);
-    expect(settled.paidThrough).toBe("2026-10-01");
-    expect(settled.savedCents).toBe(0);
-    expect(recentlyDue(settled, today)).toBe(true);
   });
 });

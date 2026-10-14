@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { ConfirmPayment } from "@/components/ConfirmPayment";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { dueSoonLabel } from "@/lib/dueLabel";
 import { formatDayMonth, parseISO, weekdayShort } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
 import { StatementList } from "@/components/StatementList";
@@ -55,6 +57,15 @@ async function HomeContent() {
         </div>
       </section>
 
+      {home.attention.length > 0 && (
+        <section aria-label="Atenção" className="space-y-3">
+          <h2 className="font-bold">Atenção</h2>
+          {home.attention.map((a) => (
+            <ConfirmPayment key={a.id} billId={a.id} name={a.name} open={a.open} />
+          ))}
+        </section>
+      )}
+
       <section>
         <SectionHeader title="Extrato" href="/extrato" linkLabel="Ver tudo" />
         <StatementList entries={statement} today={today} />
@@ -74,7 +85,11 @@ async function HomeContent() {
                 </span>
                 <span className="flex-1">
                   <span className="block font-semibold">{b.name}</span>
-                  <span className="block text-xs text-muted">{formatDayMonth(b.due)}</span>
+                  <span
+                    className={`block text-xs ${dueSoonLabel(b.daysLeft) && !b.covered ? "font-semibold text-warn-ink" : "text-muted"}`}
+                  >
+                    {dueSoonLabel(b.daysLeft) ?? formatDayMonth(b.due)}
+                  </span>
                 </span>
                 <span className="text-right">
                   <span className="block font-extrabold">{formatEUR(b.amountCents)}</span>

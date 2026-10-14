@@ -31,7 +31,7 @@ export function StatementList({ entries, today }: { entries: StatementEntry[]; t
             <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <span>
                 <span className="block font-semibold">{e.category}</span>
-                <span className="block text-xs text-muted">Gasto do dia a dia · {date}</span>
+                <span className="block text-xs text-muted">{e.detail} · {date}</span>
               </span>
               <span className="font-extrabold">−{formatEUR(e.amountCents)}</span>
             </li>

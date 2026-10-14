@@ -9,7 +9,7 @@ import {
   type ReserveCover,
 } from "@/lib/engine";
 import type { Cents } from "@/lib/money";
-import { loadState, toBillState, toDbDate } from "./state";
+import { billCycleData, loadState, toBillState, toDbDate } from "./state";
 
 export interface IncomeSimulation {
   incomeCents: Cents;
@@ -69,15 +69,11 @@ export async function confirmIncome({ incomeCents, date, overrides, useReserve }
     for (const row of bills) {
       const settled = settleBill(toBillState(row), date);
       const add = amounts.get(row.id) ?? 0;
-      await tx.bill.update({
-        where: { id: row.id },
-        data: {
-          paidThrough: settled.paidThrough,
-          consumedCents: settled.consumedCents,
-          unpaidDue: settled.unpaidDue,
-          savedCents: settled.savedCents + add,
-        },
-      });
+      // Em atraso, o dinheiro novo vai para o vencimento em aberto; senão, para o ciclo atual.
+      const next = settled.unpaidDue
+        ? { ...settled, consumedCents: settled.consumedCents + add }
+        : { ...settled, savedCents: settled.savedCents + add };
+      await tx.bill.update({ where: { id: row.id }, data: billCycleData(next) });
       if (add > 0) {
         await tx.transaction.create({
           data: { userId: user.id, type: "allocation", amountCents: add, date: when, billId: row.id, groupId, note: row.name, category: "conta" },

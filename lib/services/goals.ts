@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
-import { planGoal, type ISODate } from "@/lib/engine";
-import type { Cents } from "@/lib/money";
-import { toGoalState } from "./state";
+import { deadlinePassed, planGoal, suggestWeekly, weeksUntilDeadline, type ISODate } from "@/lib/engine";
+import { formatEUR, type Cents } from "@/lib/money";
+import { fail, ok, type ActionResult } from "@/lib/result";
+import { toDbDate, toGoalState, weekStats } from "./state";
 import { getOrCreateUser } from "./user";
 
 export interface GoalView {
@@ -18,6 +19,8 @@ export interface GoalView {
   weeksLeft: number | null;
   /** Prazo (yyyy-mm) já passou sem completar. */
   pastDeadline: boolean;
+  /** Semanas até o prazo (só metas com prazo ainda aberto). */
+  deadlineWeeks: number | null;
 }
 
 export interface GoalsOverview {
@@ -44,7 +47,9 @@ export async function listGoals(today: ISODate): Promise<GoalsOverview> {
       weeklyCents: plan.amountCents,
       complete: falta === 0,
       weeksLeft: !row.deadline && falta > 0 && row.weeklyCents > 0 ? Math.ceil(falta / row.weeklyCents) : null,
-      pastDeadline: !!row.deadline && falta > 0 && `${row.deadline}-28` < today,
+      pastDeadline: !!row.deadline && falta > 0 && deadlinePassed(row.deadline, today),
+      deadlineWeeks:
+        row.deadline && falta > 0 && !deadlinePassed(row.deadline, today) ? weeksUntilDeadline(today, row.deadline) : null,
     };
   });
 
@@ -113,4 +118,91 @@ export async function reorderGoals(ids: string[]) {
     throw new Error("Ordem inválida");
   }
   await db.$transaction(ids.map((id, i) => db.goal.update({ where: { id }, data: { priority: i + 1 } })));
+}
+
+/** Guardar (do livre da semana) ou retirar (de volta ao livre) um valor da meta. */
+export async function moveGoalMoney(
+  id: string,
+  direction: "in" | "out",
+  cents: Cents,
+  today: ISODate,
+): Promise<ActionResult> {
+  if (!Number.isInteger(cents) || cents <= 0) return fail("Informe um valor maior que zero.");
+  const user = await getOrCreateUser();
+  const goal = await db.goal.findFirst({ where: { id, userId: user.id } });
+  if (!goal) return fail("Meta não encontrada.");
+
+  if (direction === "in") {
+    const need = goal.targetCents - goal.savedCents;
+    if (need <= 0) return fail("Esta meta já está completa.");
+    if (cents > need) return fail(`Esta meta só precisa de mais ${formatEUR(need)}.`);
+    const week = await weekStats(user.id, today, user.weekStartDay);
+    if (cents > week.freeLeftCents) {
+      return fail(`Você só tem ${formatEUR(Math.max(week.freeLeftCents, 0))} livres esta semana.`);
+    }
+  } else if (cents > goal.savedCents) {
+    return fail(`Há só ${formatEUR(goal.savedCents)} guardados nesta meta.`);
+  }
+
+  await db.$transaction([
+    db.goal.update({
+      where: { id },
+      data: { savedCents: { increment: direction === "in" ? cents : -cents } },
+    }),
+    db.transaction.create({
+      data: {
+        userId: user.id,
+        type: direction === "in" ? "allocation" : "withdrawal",
+        amountCents: cents,
+        date: toDbDate(today),
+        goalId: id,
+        note: goal.name,
+        category: "manual",
+      },
+    }),
+  ]);
+  return ok();
+}
+
+/** O que fazer com uma meta cujo prazo venceu sem completar. */
+export type DeadlineChoice =
+  | { type: "extend"; deadline: string }
+  | { type: "target"; targetCents: Cents }
+  | { type: "none" }
+  | { type: "complete" };
+
+export async function resolveGoalDeadline(id: string, choice: DeadlineChoice, today: ISODate): Promise<ActionResult> {
+  const goal = await getGoal(id);
+  if (!goal) return fail("Meta não encontrada.");
+
+  switch (choice.type) {
+    case "extend": {
+      if (!/^d{4}-(0[1-9]|1[0-2])$/.test(choice.deadline) || deadlinePassed(choice.deadline, today)) {
+        return fail("Escolha um mês que ainda não passou.");
+      }
+      await db.goal.update({ where: { id }, data: { deadline: choice.deadline, weeklyCents: 0 } });
+      return ok();
+    }
+    case "target": {
+      if (!Number.isInteger(choice.targetCents) || choice.targetCents <= 0) return fail("Informe um valor-alvo maior que zero.");
+      // Se o novo alvo já foi alcançado, a meta fica completa; senão segue sem prazo até o novo alvo.
+      await db.goal.update({
+        where: { id },
+        data: { targetCents: choice.targetCents, deadline: null, weeklyCents: goal.weeklyCents || suggestWeekly(choice.targetCents) },
+      });
+      return ok();
+    }
+    case "none": {
+      await db.goal.update({
+        where: { id },
+        data: { deadline: null, weeklyCents: goal.weeklyCents || suggestWeekly(goal.targetCents) },
+      });
+      return ok();
+    }
+    case "complete": {
+      if (goal.savedCents <= 0) return fail("Não há nada guardado; exclua a meta se não quiser mais.");
+      await db.goal.update({ where: { id }, data: { targetCents: goal.savedCents, deadline: null } });
+      return ok();
+    }
+  }
 }

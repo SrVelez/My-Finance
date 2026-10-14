@@ -74,3 +74,14 @@ As fórmulas literais do brief ("recebimentos semanais até o vencimento") não 
 - **Meta**: mostra o guardado a cada recebimento (+) e as retiradas da reserva (−).
 - Mesma base do extrato geral: `lib/statement.ts` (funções puras `billHistory`, `goalHistory`, `groupByDate`, testadas) e `lib/services/history.ts`.
 - Edições de conta/meta feitas antes de `groupId` existir mostram "De um recebimento" (sem o valor de origem).
+
+## Ciclo da conta: "Você pagou?", atraso e movimentação manual
+Substitui a regra automática de "considerado pago" das Fases 2/5 (o app deixou de adivinhar).
+- **Vencimento passou → "A confirmar".** O guardado fica **retido** (`consumedCents`) e o novo ciclo já começa em €0 sem esperar resposta. O cartão **"Você pagou?"** aparece em Contas ("A CONFIRMAR") e no Início ("Atenção"), com 3 respostas: **Paguei tudo**, **Paguei outro valor** e **Ainda não paguei** (`payBill` no motor).
+- **O que não estava guardado sai do livre.** Pagar R$/€ além do retido vira uma despesa (categoria `Conta`) na semana da confirmação e aparece no extrato ("Pagamento de conta · parte que não estava guardada"). Sobra do guardado volta para o próximo ciclo.
+- **Atraso** (`unpaidDue` + `unpaidCents`): não pagou ou pagou parte. O motor separa **o que falta, exato**, no próximo recebimento; recebimentos novos entram em `consumedCents`. Um atraso em aberto **bloqueia** fechar outro ciclo até ser resolvido. Seção "EM ATRASO" em Contas, com "Paguei" e "Paguei outro valor".
+- **Pagamentos viram registro real** (`bill_payment`, na data do vencimento): o extrato da conta passa a listar **todos** os vencimentos confirmados (antes só o último, derivado). `confirmedThrough` marca o último confirmado. Só o vencimento mais recente fica pendente: se outro vencimento passar sem resposta, o anterior é fechado em silêncio.
+- **Guardar / Retirar à mão** em contas e metas: sempre do/para o **livre da semana** (transação `allocation`/`withdrawal` com `category = "manual"`). Nunca se edita o saldo direto, para o extrato e o livre sempre fecharem. Regras: não passa do que falta, não passa do livre, não retira mais que o guardado. Falhas voltam como mensagem (`ActionResult`), pois o Next esconde mensagens de erros lançados em produção.
+- **Meta com prazo vencido** (`deadlinePassed`: depois do último dia do mês-prazo) fica **pausada** no motor (antes tentava separar tudo de uma vez) e mostra o painel com 4 opções: estender o prazo, ajustar o valor-alvo (segue sem prazo), continuar sem prazo, ou concluir com o que juntou.
+- **Avisos de proximidade**: "Vence hoje/amanhã/em N dias" (até 7 dias) em destaque quando ainda falta guardar, com quantos recebimentos ainda cabem; metas com prazo mostram "faltam N semanas" (≤ 8).
+- Contas antigas no banco: `paidThrough` preenchido e `confirmedThrough` nulo aparecem como "a confirmar"; atrasos antigos sem `unpaidCents` usam o valor cheio da conta.

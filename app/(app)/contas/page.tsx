@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Button } from "@/components/ui/Button";
+import { ConfirmPayment } from "@/components/ConfirmPayment";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { dueSoonLabel } from "@/lib/dueLabel";
 import { formatDateChip, weekdayShort } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
 import { listBills } from "@/lib/services/bills";
 import { serverToday } from "@/lib/services/today";
-import { markPaidAction, markUnpaidAction } from "./actions";
 
 export default function ContasPage() {
   return (
@@ -20,9 +20,11 @@ const dueLabel = (due: string) => `${weekdayShort(due).toLowerCase()}, ${formatD
 
 async function Contas() {
   const today = await serverToday();
-  const { totalCents, upcoming, justDue } = await listBills(today);
-  const toPay = upcoming.filter((b) => b.overdue);
-  const next = upcoming.filter((b) => !b.overdue);
+  const { totalCents, upcoming, paid } = await listBills(today);
+  // Em atraso e "a confirmar" pedem uma resposta; as demais seguem em "Próximas".
+  const overdue = upcoming.filter((b) => b.open?.kind === "overdue");
+  const toConfirm = upcoming.filter((b) => b.open?.kind === "pending");
+  const next = upcoming.filter((b) => b.open?.kind !== "overdue");
 
   return (
     <main className="flex-1 space-y-6 px-5 pt-5 pb-6">
@@ -44,21 +46,21 @@ async function Contas() {
 
       {upcoming.length === 0 && <p className="text-sm text-muted">Nenhuma conta ainda. Toque em + para adicionar.</p>}
 
-      {toPay.length > 0 && (
-        <Section title="A PAGAR">
-          {toPay.map((b) => (
-            <li key={b.id} className="flex items-center justify-between gap-3 rounded-card border border-accent/50 bg-warn-bg p-4">
-              <Link href={`/contas/${b.id}`} className="min-w-0">
-                <span className="block font-semibold">
-                  {b.name} · {formatEUR(b.amountCents)}
-                </span>
-                <span className="block text-xs text-warn-ink">Venceu {formatDateChip(b.due, "")} · não foi pago</span>
-              </Link>
-              <form action={markPaidAction.bind(null, b.id)}>
-                <Button variant="outline" className="w-auto min-h-11 px-3 text-sm">
-                  Paguei
-                </Button>
-              </form>
+      {overdue.length > 0 && (
+        <Section title="EM ATRASO">
+          {overdue.map((b) => (
+            <li key={b.id}>
+              <ConfirmPayment billId={b.id} name={b.name} open={b.open!} />
+            </li>
+          ))}
+        </Section>
+      )}
+
+      {toConfirm.length > 0 && (
+        <Section title="A CONFIRMAR">
+          {toConfirm.map((b) => (
+            <li key={b.id}>
+              <ConfirmPayment billId={b.id} name={b.name} open={b.open!} />
             </li>
           ))}
         </Section>
@@ -66,43 +68,61 @@ async function Contas() {
 
       {next.length > 0 && (
         <Section title="PRÓXIMAS">
-          {next.map((b) => (
-            <li key={b.id}>
-              <Link href={`/contas/${b.id}`} className="block space-y-2 rounded-card border border-line bg-surface p-4">
-                <span className="flex items-start justify-between">
-                  <span>
-                    <span className="block font-semibold">{b.name}</span>
-                    <span className="block text-xs text-muted">Vence {dueLabel(b.due)}</span>
+          {next.map((b) => {
+            const soon = dueSoonLabel(b.daysLeft);
+            const short = soon && !b.covered;
+            const falta = b.targetCents - b.savedCents;
+            return (
+              <li key={b.id}>
+                <Link href={`/contas/${b.id}`} className="block space-y-2 rounded-card border border-line bg-surface p-4">
+                  <span className="flex items-start justify-between">
+                    <span>
+                      <span className="block font-semibold">{b.name}</span>
+                      <span className={`block text-xs ${short ? "font-semibold text-warn-ink" : "text-muted"}`}>
+                        {soon ? `${soon} · ` : "Vence "}
+                        {dueLabel(b.due)}
+                      </span>
+                    </span>
+                    <span className="text-lg font-extrabold">{formatEUR(b.amountCents)}</span>
                   </span>
-                  <span className="text-lg font-extrabold">{formatEUR(b.amountCents)}</span>
-                </span>
-                <ProgressBar label={`Guardado para ${b.name}`} value={b.savedCents} max={b.amountCents} />
-                <span className={`block text-xs ${b.covered ? "font-semibold text-brand" : "text-muted"}`}>
-                  {b.covered
-                    ? "✓ Valor todo guardado"
-                    : `${formatEUR(b.savedCents)} guardados · faltam ${formatEUR(b.amountCents - b.savedCents)}`}
-                </span>
-              </Link>
-            </li>
-          ))}
+                  <ProgressBar label={`Guardado para ${b.name}`} value={b.savedCents} max={b.targetCents} />
+                  <span className={`block text-xs ${b.covered ? "font-semibold text-brand" : "text-muted"}`}>
+                    {b.covered
+                      ? "✓ Valor todo guardado"
+                      : `${formatEUR(b.savedCents)} guardados · faltam ${formatEUR(falta)}`}
+                  </span>
+                  {short && (
+                    <span className="block text-xs text-warn-ink">
+                      {b.receiptsLeft <= 1
+                        ? "Só dá para separar no próximo recebimento antes do vencimento."
+                        : `Ainda cabem ${b.receiptsLeft} recebimentos até o vencimento.`}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
         </Section>
       )}
 
-      {justDue.length > 0 && (
+      {paid.length > 0 && (
         <Section title="JÁ VENCERAM">
-          {justDue.map((b) => (
-            <li key={b.id} className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
-              <span>
-                <span className="block font-semibold">
-                  {b.name} · {formatEUR(b.amountCents)}
+          {paid.map((b) => (
+            <li key={b.id}>
+              <Link
+                href={`/contas/${b.id}`}
+                className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface p-4"
+              >
+                <span>
+                  <span className="block font-semibold">
+                    {b.name} · {formatEUR(b.amountCents)}
+                  </span>
+                  <span className="block text-xs text-muted">{formatDateChip(b.confirmedThrough, "")} · pagamento confirmado</span>
                 </span>
-                <span className="block text-xs text-muted">{formatDateChip(b.paidThrough, "")} · considerado pago</span>
-              </span>
-              <form action={markUnpaidAction.bind(null, b.id)}>
-                <Button variant="outline" className="w-auto min-h-11 px-3 text-sm">
-                  Não foi pago
-                </Button>
-              </form>
+                <span aria-hidden className="font-bold text-brand">
+                  ✓
+                </span>
+              </Link>
             </li>
           ))}
         </Section>

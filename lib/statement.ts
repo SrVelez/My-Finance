@@ -36,7 +36,7 @@ export type StatementEntry =
       /** Divisão do dinheiro; vazia em recebimentos antigos sem agrupamento. */
       lines: StatementLine[];
     }
-  | { kind: "expense"; id: string; date: string; amountCents: Cents; category: string }
+  | { kind: "expense"; id: string; date: string; amountCents: Cents; category: string; detail: string }
   /** Alocação/retirada solta (sem recebimento associado). */
   | { kind: "movement"; id: string; date: string; amountCents: Cents; label: string; detail: string; sign: 1 | -1 };
 
@@ -57,7 +57,19 @@ export function buildStatement(rows: StatementRow[]): StatementEntry[] {
   for (const r of rows) {
     const key: [string, number] = [r.date, r.createdAt];
     if (r.type === "expense") {
-      entries.push({ sortKey: key, entry: { kind: "expense", id: r.id, date: r.date, amountCents: r.amountCents, category: r.category ?? "Outro" } });
+      // "Conta" = parte de um pagamento de conta que não estava guardada (saiu do livre).
+      const billShare = r.category === "Conta";
+      entries.push({
+        sortKey: key,
+        entry: {
+          kind: "expense",
+          id: r.id,
+          date: r.date,
+          amountCents: r.amountCents,
+          category: billShare ? (r.billName ?? r.note ?? "Conta") : (r.category ?? "Outro"),
+          detail: billShare ? "Pagamento de conta · parte que não estava guardada" : "Gasto do dia a dia",
+        },
+      });
     } else if (r.type === "income") {
       const kids = r.groupId ? (children.get(r.groupId) ?? []) : [];
       const lines: StatementLine[] = [];
@@ -90,7 +102,13 @@ export function buildStatement(rows: StatementRow[]): StatementEntry[] {
           date: r.date,
           amountCents: r.amountCents,
           label: nameOf(r, "Removida"),
-          detail: withdrawal ? "Retirado da meta" : "Guardado",
+          detail: r.category === "manual"
+            ? withdrawal
+              ? "Retirado por você · voltou para o livre"
+              : "Guardado por você · saiu do livre"
+            : withdrawal
+              ? "Retirado da meta"
+              : "Guardado",
           sign: withdrawal ? 1 : -1,
         },
       });
@@ -132,26 +150,34 @@ export interface ItemTxRow {
   date: string;
   groupId: string | null;
   createdAt: number;
+  /** Movido à mão pelo usuário (Guardar/Retirar), não por um recebimento. */
+  manual?: boolean;
 }
 
 const origin = (row: ItemTxRow, incomeByGroup: Map<string, Cents>) => {
+  if (row.manual) return "Guardado por você · saiu do livre";
   const income = row.groupId ? incomeByGroup.get(row.groupId) : undefined;
   return income ? `Do recebimento de ${formatEUR(income)}` : "De um recebimento";
 };
 
-/** Extrato de uma conta: o que foi guardado para ela a cada recebimento. */
+/**
+ * Extrato de uma conta: guardado a cada recebimento (ou à mão), retiradas
+ * e os pagamentos confirmados em cada vencimento.
+ */
 export function billHistory(rows: ItemTxRow[], incomeByGroup: Map<string, Cents>): HistoryItem[] {
-  return rows
-    .filter((r) => r.type === "allocation")
-    .map((r) => ({
-      id: r.id,
-      date: r.date,
-      label: "Guardado para a conta",
-      detail: origin(r, incomeByGroup),
-      amountCents: r.amountCents,
-      sign: 1 as const,
-      createdAt: r.createdAt,
-    }));
+  return rows.flatMap((r): HistoryItem[] => {
+    const base = { id: r.id, date: r.date, amountCents: r.amountCents, createdAt: r.createdAt };
+    if (r.type === "allocation") {
+      return [{ ...base, label: "Guardado para a conta", detail: origin(r, incomeByGroup), sign: 1 }];
+    }
+    if (r.type === "withdrawal") {
+      return [{ ...base, label: "Retirado da conta", detail: "Retirado por você · voltou para o livre", sign: -1 }];
+    }
+    if (r.type === "bill_payment") {
+      return [{ ...base, label: "Vencimento pago", detail: "Pagamento confirmado por você", sign: -1 }];
+    }
+    return [];
+  });
 }
 
 /** Extrato de uma meta: guardado a cada recebimento e retiradas (reserva). */
@@ -161,7 +187,17 @@ export function goalHistory(rows: ItemTxRow[], incomeByGroup: Map<string, Cents>
       return [{ id: r.id, date: r.date, label: "Guardado na meta", detail: origin(r, incomeByGroup), amountCents: r.amountCents, sign: 1, createdAt: r.createdAt }];
     }
     if (r.type === "withdrawal") {
-      return [{ id: r.id, date: r.date, label: "Retirado da meta", detail: "Usado para completar o dia a dia", amountCents: r.amountCents, sign: -1, createdAt: r.createdAt }];
+      return [
+        {
+          id: r.id,
+          date: r.date,
+          label: "Retirado da meta",
+          detail: r.manual ? "Retirado por você · voltou para o livre" : "Usado para completar o dia a dia",
+          amountCents: r.amountCents,
+          sign: -1,
+          createdAt: r.createdAt,
+        },
+      ];
     }
     return [];
   });

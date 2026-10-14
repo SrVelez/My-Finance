@@ -6,6 +6,8 @@ export const bill = (p: Partial<EngineBill> & Pick<EngineBill, "id" | "name" | "
   paidThrough: null,
   consumedCents: 0,
   unpaidDue: null,
+  unpaidCents: 0,
+  confirmedThrough: null,
   createdOn: "2000-01-01",
   ...p,
 });

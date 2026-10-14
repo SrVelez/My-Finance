@@ -3,11 +3,14 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { HistoryList } from "@/components/HistoryList";
+import { MoveMoney } from "@/components/MoveMoney";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { formatMonthYear } from "@/lib/engine";
 import { goalStatus } from "@/lib/goalStatus";
 import { formatEUR } from "@/lib/money";
 import { getGoalDetail } from "@/lib/services/history";
 import { serverToday } from "@/lib/services/today";
+import { DeadlineChoicePanel } from "../DeadlineChoice";
 
 export default function MetaPage({ params }: PageProps<"/metas/[id]">) {
   return (
@@ -42,6 +45,16 @@ async function Meta({ params }: { params: PageProps<"/metas/[id]">["params"] }) 
         }
       />
       <main className="flex-1 space-y-6 px-5 pt-4 pb-8">
+        {goal.pastDeadline && goal.deadline && (
+          <DeadlineChoicePanel
+            goalId={goal.id}
+            deadlineLabel={formatMonthYear(goal.deadline)}
+            savedCents={goal.savedCents}
+            targetCents={goal.targetCents}
+            minMonth={today.slice(0, 7)}
+          />
+        )}
+
         <section className="space-y-3 rounded-card border border-line bg-surface p-4">
           <div className="flex items-end justify-between">
             <p className="font-display text-4xl font-extrabold">{formatEUR(goal.savedCents)}</p>
@@ -55,6 +68,8 @@ async function Meta({ params }: { params: PageProps<"/metas/[id]">["params"] }) 
             {goal.weeklyCents > 0 && <span className="text-muted">{formatEUR(goal.weeklyCents)}/semana</span>}
           </div>
         </section>
+
+        <MoveMoney kind="goal" id={goal.id} canIn={!goal.complete} canOut={goal.savedCents > 0} />
 
         <section>
           <h2 className="mb-2 font-bold">Extrato</h2>

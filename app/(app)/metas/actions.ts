@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createGoal, deleteGoal, reorderGoals, updateGoal, type GoalInput } from "@/lib/services/goals";
+import {
+  createGoal,
+  deleteGoal,
+  reorderGoals,
+  resolveGoalDeadline,
+  updateGoal,
+  type DeadlineChoice,
+  type GoalInput,
+} from "@/lib/services/goals";
+import { fail, type ActionResult } from "@/lib/result";
+import { serverToday } from "@/lib/services/today";
 import { assertCents, assertDeadline, assertName } from "@/lib/validate";
 
 function parse(input: GoalInput): GoalInput {
@@ -42,4 +52,15 @@ export async function reorderGoalsAction(ids: string[]) {
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) throw new Error("Ordem inválida");
   await reorderGoals(ids);
   refresh();
+}
+
+/** Meta com prazo vencido: estender, ajustar o alvo, seguir sem prazo ou concluir. */
+export async function resolveGoalDeadlineAction(id: string, choice: DeadlineChoice): Promise<ActionResult> {
+  try {
+    const result = await resolveGoalDeadline(id, choice, await serverToday());
+    if (result.ok) refresh();
+    return result;
+  } catch {
+    return fail("Não foi possível salvar. Tente de novo.");
+  }
 }

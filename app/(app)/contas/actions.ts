@@ -5,11 +5,11 @@ import { redirect } from "next/navigation";
 import {
   createBill,
   deleteBill,
-  markBillPaid,
-  markBillUnpaid,
+  confirmBillPayment,
   updateBill,
   type BillInput,
 } from "@/lib/services/bills";
+import { fail, type ActionResult } from "@/lib/result";
 import { serverToday } from "@/lib/services/today";
 import { assertCents, assertDueDay, assertName } from "@/lib/validate";
 
@@ -44,12 +44,16 @@ export async function deleteBillAction(id: string) {
   redirect("/contas");
 }
 
-export async function markUnpaidAction(id: string) {
-  await markBillUnpaid(id, await serverToday());
-  refresh();
-}
-
-export async function markPaidAction(id: string) {
-  await markBillPaid(id, await serverToday());
-  refresh();
+/**
+ * "Você pagou?": `paidCents` null = paguei tudo; 0 = ainda não paguei; outro valor = parcial.
+ * Falhas de regra voltam como valor (o Next esconde mensagens de erros lançados em produção).
+ */
+export async function confirmPaymentAction(id: string, paidCents: number | null): Promise<ActionResult> {
+  try {
+    const result = await confirmBillPayment(id, paidCents, await serverToday());
+    if (result.ok) refresh();
+    return result;
+  } catch {
+    return fail("Não foi possível confirmar. Tente de novo.");
+  }
 }

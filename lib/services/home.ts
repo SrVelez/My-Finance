@@ -1,5 +1,6 @@
-import { formatWeekLabel, nextDue, settleBill, type ISODate } from "@/lib/engine";
+import { formatWeekLabel, type ISODate } from "@/lib/engine";
 import type { Cents } from "@/lib/money";
+import { listBills, type BillView, type OpenDue } from "./bills";
 import { loadState, weekStats } from "./state";
 
 export interface HomeData {
@@ -8,27 +9,15 @@ export interface HomeData {
   poolCents: Cents;
   spentCents: Cents;
   freeLeftCents: Cents;
-  upcoming: { id: string; name: string; due: ISODate; amountCents: Cents; savedCents: Cents; covered: boolean }[];
+  /** Vencimentos que esperam resposta: "Você pagou?" ou em atraso. */
+  attention: { id: string; name: string; open: OpenDue }[];
+  upcoming: Pick<BillView, "id" | "name" | "due" | "amountCents" | "savedCents" | "covered" | "daysLeft" | "receiptsLeft" | "targetCents">[];
   goals: { id: string; name: string; savedCents: Cents; targetCents: Cents }[];
 }
 
 export async function getHomeData(today: ISODate): Promise<HomeData> {
   const { user, state } = await loadState();
-  const week = await weekStats(user.id, today, user.weekStartDay);
-
-  const upcoming = state.bills
-    .map((b) => {
-      const settled = settleBill(b, today);
-      return {
-        id: b.id,
-        name: b.name,
-        due: nextDue(settled, today),
-        amountCents: b.amountCents,
-        savedCents: settled.savedCents,
-        covered: settled.savedCents >= b.amountCents,
-      };
-    })
-    .sort((a, b) => a.due.localeCompare(b.due));
+  const [week, bills] = await Promise.all([weekStats(user.id, today, user.weekStartDay), listBills(today)]);
 
   return {
     name: user.name,
@@ -36,7 +25,9 @@ export async function getHomeData(today: ISODate): Promise<HomeData> {
     poolCents: week.poolCents,
     spentCents: week.spentCents,
     freeLeftCents: week.freeLeftCents,
-    upcoming,
+    attention: bills.upcoming.filter((b) => b.open).map((b) => ({ id: b.id, name: b.name, open: b.open! })),
+    // Em atraso já aparece em "atenção"; aqui ficam só os próximos vencimentos.
+    upcoming: bills.upcoming.filter((b) => b.open?.kind !== "overdue"),
     goals: state.goals.map((g) => ({
       id: g.id,
       name: g.name,

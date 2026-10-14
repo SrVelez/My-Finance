@@ -40,6 +40,27 @@ test("jornada completa: onboarding → recebi → gastei → metas → ajustes �
   await expect(tid(page, "history")).toContainText("Guardado na meta");
   await expect(tid(page, "history")).toContainText("+€25");
   await expect(tid(page, "history")).toContainText("Do recebimento de €1.000");
+
+  // Guardar à mão: sai do livre da semana e aparece no extrato da meta
+  await page.getByRole("button", { name: /Guardar/ }).click();
+  await page.getByLabel("Valor a guardar").fill("10");
+  await page.getByRole("button", { name: "Confirmar" }).click();
+  await expect(tid(page, "history")).toContainText("Guardado por você");
+  await expect(tid(page, "history")).toContainText("+€10");
+
+  // Regra de negócio volta como mensagem (a meta só precisa de mais €365)
+  await page.getByRole("button", { name: /Guardar/ }).click();
+  await page.getByLabel("Valor a guardar").fill("9999");
+  await page.getByRole("button", { name: "Confirmar" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "só precisa" })).toContainText("só precisa de mais");
+  await page.getByRole("button", { name: "Cancelar" }).click();
+
+  // Retirar devolve ao livre
+  await page.getByRole("button", { name: /Retirar/ }).click();
+  await page.getByLabel("Valor a retirar").fill("10");
+  await page.getByRole("button", { name: "Confirmar" }).click();
+  await expect(tid(page, "history")).toContainText("Retirado por você");
+  await expect(tid(page, "history")).toContainText("−€10");
   await page.getByRole("link", { name: "Voltar" }).click();
 
   // Ajustes: nome aparece no Início

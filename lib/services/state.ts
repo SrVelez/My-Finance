@@ -14,10 +14,22 @@ export const toBillState = (b: Bill): EngineBill => ({
   paidThrough: b.paidThrough,
   consumedCents: b.consumedCents,
   unpaidDue: b.unpaidDue,
+  unpaidCents: b.unpaidCents,
+  confirmedThrough: b.confirmedThrough,
   createdOn: todayISO(b.createdAt),
 });
 
-export const toGoalState = (g: Goal): EngineGoal => ({
+/** Campos do ciclo da conta que o motor altera e precisam ser gravados. */
+export const billCycleData = (b: EngineBill) => ({
+  paidThrough: b.paidThrough,
+  consumedCents: b.consumedCents,
+  unpaidDue: b.unpaidDue,
+  unpaidCents: b.unpaidCents,
+  confirmedThrough: b.confirmedThrough,
+  savedCents: b.savedCents,
+});
+
+export const toGoalState =(g: Goal): EngineGoal => ({
   id: g.id,
   name: g.name,
   targetCents: g.targetCents,

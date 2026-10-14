@@ -71,6 +71,9 @@ export function formatMonthYear(ym: string): string {
   return `${MONTHS[m - 1]}/${y}`;
 }
 
+/** O prazo (`yyyy-mm`) já acabou: hoje é depois do último dia desse mês. */
+export const deadlinePassed = (deadline: string, today: ISODate): boolean => today.slice(0, 7) > deadline;
+
 /** Semanas até o prazo (dia 15 do mês, ⌈dias/7⌉), no mínimo 1. */
 export function weeksUntilDeadline(date: ISODate, deadline: string): number {
   const [y, m] = deadline.split("-").map(Number);

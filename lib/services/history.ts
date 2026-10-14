@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { settleBill, type ISODate } from "@/lib/engine";
+import type { ISODate } from "@/lib/engine";
+import { formatEUR } from "@/lib/money";
 import {
   billHistory,
   goalHistory,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/statement";
 import { listBills, type BillView } from "./bills";
 import { listGoals, type GoalView } from "./goals";
-import { fromDbDate, toBillState } from "./state";
+import { fromDbDate } from "./state";
 import { getOrCreateUser } from "./user";
 
 /** Valor recebido em cada recebimento, para dizer "do recebimento de €X". */
@@ -24,7 +25,7 @@ async function incomesByGroup(userId: string, rows: { groupId: string | null }[]
   return new Map(incomes.map((i) => [i.groupId as string, i.amountCents]));
 }
 
-const toRows = (txs: { id: string; type: string; amountCents: number; date: Date; groupId: string | null; createdAt: Date }[]): ItemTxRow[] =>
+const toRows = (txs: { id: string; type: string; amountCents: number; date: Date; groupId: string | null; createdAt: Date; category: string | null }[]): ItemTxRow[] =>
   txs.map((t) => ({
     id: t.id,
     type: t.type,
@@ -32,6 +33,7 @@ const toRows = (txs: { id: string; type: string; amountCents: number; date: Date
     date: fromDbDate(t.date),
     groupId: t.groupId,
     createdAt: t.createdAt.getTime(),
+    manual: t.category === "manual",
   }));
 
 export interface BillDetail {
@@ -39,38 +41,28 @@ export interface BillDetail {
   history: HistoryDay[];
 }
 
-/** Conta + extrato: quanto foi guardado a cada recebimento e o último vencimento. */
+/** Conta + extrato: guardado, retiradas, pagamentos confirmados e o vencimento em aberto. */
 export async function getBillDetail(id: string, today: ISODate): Promise<BillDetail | null> {
   const user = await getOrCreateUser();
-  const row = await db.bill.findFirst({ where: { id, userId: user.id } });
-  if (!row) return null;
   const bill = (await listBills(today)).upcoming.find((b) => b.id === id);
   if (!bill) return null;
 
   const txs = await db.transaction.findMany({ where: { userId: user.id, billId: id } });
   const items: HistoryItem[] = billHistory(toRows(txs), await incomesByGroup(user.id, txs));
 
-  // Último vencimento (derivado do estado: o app não registra pagamentos antigos).
-  const settled = settleBill(toBillState(row), today);
-  if (settled.unpaidDue) {
+  // Vencimento ainda sem resposta final: aparece no topo como informação (sem sinal).
+  if (bill.open) {
+    const pending = bill.open.kind === "pending";
     items.push({
-      id: `unpaid-${id}`,
-      date: settled.unpaidDue,
-      label: "Vencimento sem pagamento",
-      detail: "Marcado como não pago · ainda a pagar",
-      amountCents: row.amountCents,
+      id: `open-${id}`,
+      date: bill.open.due,
+      label: pending ? "Vencimento a confirmar" : "Vencimento em atraso",
+      detail: pending
+        ? "Você ainda não confirmou se pagou"
+        : `Ainda faltam ${formatEUR(Math.max(bill.open.owedCents - bill.open.fundsCents, 0))} para pagar`,
+      amountCents: bill.open.owedCents,
       sign: -1,
       neutral: true,
-      createdAt: Number.MAX_SAFE_INTEGER,
-    });
-  } else if (settled.paidThrough && settled.paidThrough > toBillState(row).createdOn && settled.consumedCents > 0) {
-    items.push({
-      id: `paid-${id}`,
-      date: settled.paidThrough,
-      label: "Vencimento pago",
-      detail: "Considerado pago com o valor guardado",
-      amountCents: settled.consumedCents,
-      sign: -1,
       createdAt: Number.MAX_SAFE_INTEGER,
     });
   }

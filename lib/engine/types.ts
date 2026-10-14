@@ -10,12 +10,16 @@ export interface EngineBill {
   dueDay: number;
   /** Saldo guardado no ciclo atual. */
   savedCents: Cents;
-  /** Último vencimento já considerado pago; null = nenhum. */
+  /** Último vencimento já fechado no ciclo (a confirmar, em atraso ou confirmado); null = nenhum. */
   paidThrough: ISODate | null;
-  /** Saldo consumido ao considerar o vencimento pago (permite reverter). */
+  /** Dinheiro retido para o vencimento em aberto (a confirmar ou em atraso). */
   consumedCents: Cents;
-  /** Vencimento marcado como "Não foi pago" (continua devendo). */
+  /** Vencimento em atraso (o usuário disse que não pagou, ou pagou só uma parte). */
   unpaidDue: ISODate | null;
+  /** Quanto falta pagar do vencimento em atraso (0 = valor cheio da conta). */
+  unpaidCents: Cents;
+  /** Último vencimento que o usuário confirmou. */
+  confirmedThrough: ISODate | null;
   /** Dia em que a conta foi criada: vencimentos anteriores a ele não contam. */
   createdOn: ISODate;
 }
