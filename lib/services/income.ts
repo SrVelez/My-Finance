@@ -63,7 +63,7 @@ export async function confirmIncome({ incomeCents, date, overrides, useReserve }
 
   await db.$transaction(async (tx) => {
     await tx.transaction.create({
-      data: { userId: user.id, type: "income", amountCents: incomeCents, date: when, groupId },
+      data: { userId: user.id, type: "income", amountCents: incomeCents, date: when, groupId, shortfallCents: dist.shortfallCents },
     });
 
     for (const row of bills) {

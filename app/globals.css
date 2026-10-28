@@ -15,6 +15,13 @@
   --color-neutral-bar: #a9b3ae;
   --color-locked: #e7ebe8;
 
+  /* Gráficos do Resumo: o mesmo código de cores da prévia do motor (≥3:1 sobre o fundo claro). */
+  --color-chart-bills: #8a9690;
+  --color-chart-living: #3fa36f;
+  --color-chart-goals: #c77d12;
+  --color-chart-free: #0b6e4f;
+  --color-chart-late: #9a4a0a;
+
   --radius-card: 1rem;
 
   --font-sans: var(--font-body), system-ui, sans-serif;

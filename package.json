@@ -11,6 +11,7 @@
     "e2e": "playwright test",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:resumo": "tsx prisma/seed-dashboard.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -21,7 +22,8 @@
     "next": "16.4.0",
     "prisma": "^6.19.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

@@ -58,6 +58,8 @@ model Goal {
   weeklyCents  Int           @default(0)
   priority     Int
   isEmergency  Boolean       @default(false)
+  // Base do marcador de "ritmo esperado" no Resumo.
+  createdAt    DateTime      @default(now())
   transactions Transaction[]
 
   @@index([userId])
@@ -73,6 +75,8 @@ model Transaction {
   category    String?
   date        DateTime
   note        String?
+  // Só em `income`: quanto faltou para o dia a dia naquele recebimento (null = antes deste campo).
+  shortfallCents Int?
   // Liga o recebimento às alocações/retiradas geradas por ele (extrato).
   groupId     String?
   billId      String?
