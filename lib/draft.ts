@@ -1,5 +1,6 @@
 import { euros, type Cents } from "@/lib/money";
 import { suggestWeekly, type EngineState } from "@/lib/engine";
+import { isDeadline, MAX_CENTS } from "@/lib/validate";
 
 export interface DraftBill {
   id: string;
@@ -86,20 +87,19 @@ const isInt = (n: unknown, min: number, max: number): n is number =>
 export function sanitizeDraft(input: unknown): OnboardingDraft {
   const raw = input as Partial<OnboardingDraft> | null;
   if (!raw || !Array.isArray(raw.bills) || !Array.isArray(raw.goals)) throw new Error("Dados inválidos");
-  const MAX = 100_000_000;
-  if (!isInt(raw.weeklyLivingCents, 0, MAX)) throw new Error("Gasto semanal inválido");
+  if (!isInt(raw.weeklyLivingCents, 0, MAX_CENTS)) throw new Error("Gasto semanal inválido");
 
   const bills = raw.bills.slice(0, 30).map((b: DraftBill) => {
     const name = String(b.name ?? "").trim().slice(0, 40);
-    if (!name || !isInt(b.amountCents, 1, MAX) || !isInt(b.dueDay, 1, 31)) throw new Error("Conta inválida");
+    if (!name || !isInt(b.amountCents, 1, MAX_CENTS) || !isInt(b.dueDay, 1, 31)) throw new Error("Conta inválida");
     return { id: newId(), name, amountCents: b.amountCents, dueDay: b.dueDay };
   });
 
   const goals = raw.goals.slice(0, 30).map((g: DraftGoal) => {
     const name = String(g.name ?? "").trim().slice(0, 40);
-    const deadline = g.deadline && /^\d{4}-(0[1-9]|1[0-2])$/.test(g.deadline) ? g.deadline : null;
+    const deadline = isDeadline(g.deadline) ? g.deadline : null;
     const weekly = g.weeklyCents ?? suggestWeekly(Number(g.targetCents));
-    if (!name || !isInt(g.targetCents, 1, MAX) || !isInt(weekly, 0, MAX)) throw new Error("Meta inválida");
+    if (!name || !isInt(g.targetCents, 1, MAX_CENTS) || !isInt(weekly, 0, MAX_CENTS)) throw new Error("Meta inválida");
     return {
       id: newId(),
       name,
