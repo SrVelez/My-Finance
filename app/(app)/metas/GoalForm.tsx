@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
+import { useAction } from "@/components/ui/useAction";
 import { suggestWeekly } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
 import { createGoalAction, deleteGoalAction, updateGoalAction } from "./actions";
@@ -29,23 +31,11 @@ export function GoalForm({ goal, minMonth }: Props) {
   const [weekly, setWeekly] = useState<number | null>(goal && !goal.deadline ? goal.weeklyCents : null);
   const [isEmergency, setIsEmergency] = useState(goal?.isEmergency ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
 
   const suggested = suggestWeekly(targetCents);
   const effectiveWeekly = weekly ?? suggested;
   const valid = name.trim() !== "" && targetCents > 0;
-
-  const run = (fn: () => Promise<void>) =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await fn();
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível salvar. Tente de novo.");
-      }
-    });
 
   const save = () => {
     const input = { name, targetCents, deadline, weeklyCents: deadline ? 0 : effectiveWeekly, isEmergency };
@@ -108,11 +98,7 @@ export function GoalForm({ goal, minMonth }: Props) {
           Usar como reserva de emergência
         </label>
 
-        {error && (
-          <p role="alert" className="text-sm text-warn-ink">
-            {error}
-          </p>
-        )}
+        {error && <FormError>{error}</FormError>}
       </main>
       <footer className="space-y-2 px-5 pt-4 pb-5">
         <Button disabled={!valid || pending} onClick={save}>

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
+import { useAction } from "@/components/ui/useAction";
 import { resetAllDataAction, saveSettingsAction } from "./actions";
 
 const DAYS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
@@ -17,21 +19,7 @@ export function SettingsForm({
   const [weekStartDay, setWeekStartDay] = useState(initial.weekStartDay);
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const run = (fn: () => Promise<void>, onOk?: () => void) =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await fn();
-        onOk?.();
-      } catch (e) {
-        // redirect() é lançado internamente pelo Next; só mostramos falhas reais.
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Algo deu errado. Tente de novo.");
-      }
-    });
+  const { run, pending, error } = useAction("Algo deu errado. Tente de novo.");
 
   return (
     <main className="flex-1 space-y-6 px-5 pt-5 pb-6">
@@ -119,11 +107,7 @@ export function SettingsForm({
         )}
       </section>
 
-      {error && (
-        <p role="alert" className="text-center text-sm text-warn-ink">
-          {error}
-        </p>
-      )}
+      {error && <FormError center>{error}</FormError>}
     </main>
   );
 }

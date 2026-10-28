@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { Keypad, useAmountInput } from "@/components/ui/Keypad";
 import { MoneyField } from "@/components/ui/MoneyField";
+import { useAction } from "@/components/ui/useAction";
 import { amountCents, displayAmount } from "@/lib/amount";
 import { formatDateChip } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
@@ -18,22 +20,9 @@ export function ReceberFlow() {
   const [step, setStep] = useState<Step>("valor");
   const [sim, setSim] = useState<IncomeSimulation | null>(null);
   const [date, setDate] = useState(todayISO());
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Algo deu errado. Tente de novo.");
   const { text, press } = useAmountInput();
   const cents = amountCents(text);
-
-  const run = (fn: () => Promise<void>) =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await fn();
-      } catch (e) {
-        // redirect() é lançado internamente pelo Next; só mostramos falhas reais.
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Algo deu errado. Tente de novo.");
-      }
-    });
 
   const showDistribution = () =>
     run(async () => {
@@ -66,11 +55,7 @@ export function ReceberFlow() {
           </label>
         </main>
         <div className="space-y-3 px-5 pb-5">
-          {error && (
-            <p role="alert" className="text-center text-sm text-warn-ink">
-              {error}
-            </p>
-          )}
+          {error && <FormError center>{error}</FormError>}
           <Keypad onPress={press} />
           <Button disabled={cents <= 0 || pending} onClick={showDistribution}>
             {pending ? "Calculando…" : "Ver distribuição"}
@@ -92,24 +77,14 @@ function Distribution({ sim, back }: { sim: IncomeSimulation; back: () => void }
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(d.allocations.map((a) => [a.id, a.amountCents])),
   );
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Não foi possível confirmar. Tente de novo.");
 
   const toSave = d.allocations.reduce((s, a) => s + (values[a.id] ?? 0), 0);
   const free = incomeCents - toSave;
   const living = Math.min(sim.weeklyLivingCents, Math.max(free, 0));
   const over = free < 0;
 
-  const confirm = () =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await confirmIncomeAction({ incomeCents, date, overrides: editing ? values : undefined });
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível confirmar. Tente de novo.");
-      }
-    });
+  const confirm = () => run(() => confirmIncomeAction({ incomeCents, date, overrides: editing ? values : undefined }));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -156,11 +131,7 @@ function Distribution({ sim, back }: { sim: IncomeSimulation; back: () => void }
             Os valores passam do que você recebeu em {formatEUR(-free)}.
           </p>
         )}
-        {error && (
-          <p role="alert" className="text-center text-sm text-warn-ink">
-            {error}
-          </p>
-        )}
+        {error && <FormError center>{error}</FormError>}
       </main>
       <footer className="sticky bottom-0 grid grid-cols-2 gap-3 bg-canvas px-5 pt-3 pb-5">
         <Button variant="outline" onClick={() => setEditing((e) => !e)}>
@@ -178,26 +149,19 @@ function Shortfall({ sim, back }: { sim: IncomeSimulation; back: () => void }) {
   const { distribution: d, reserve } = sim;
   const canUseReserve = !!reserve && reserve.withdrawalCents > 0;
   const [option, setOption] = useState<"reserve" | "less">(canUseReserve ? "reserve" : "less");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Não foi possível confirmar. Tente de novo.");
 
   const billsCovered = d.allocations.filter((a) => a.kind === "bill").every((a) => !a.reason.startsWith("Dinheiro insuficiente"));
   const goalsPaused = d.goalsCents === 0;
 
   const confirm = () =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await confirmIncomeAction({
-          incomeCents: sim.incomeCents,
-          date: sim.date,
-          useReserve: option === "reserve",
-        });
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível confirmar. Tente de novo.");
-      }
-    });
+    run(() =>
+      confirmIncomeAction({
+        incomeCents: sim.incomeCents,
+        date: sim.date,
+        useReserve: option === "reserve",
+      }),
+    );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -239,11 +203,7 @@ function Shortfall({ sim, back }: { sim: IncomeSimulation; back: () => void }) {
             sub={`Livre: ${formatEUR(d.freeCents)}. Nada sai das metas.`}
           />
         </fieldset>
-        {error && (
-          <p role="alert" className="text-center text-sm text-warn-ink">
-            {error}
-          </p>
-        )}
+        {error && <FormError center>{error}</FormError>}
       </main>
       <footer className="sticky bottom-0 bg-canvas px-5 pt-3 pb-5">
         <Button disabled={pending} onClick={confirm}>

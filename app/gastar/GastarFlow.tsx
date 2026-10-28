@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { FormError } from "@/components/ui/FormError";
 import { Keypad, useAmountInput } from "@/components/ui/Keypad";
+import { useAction } from "@/components/ui/useAction";
 import { amountCents, displayAmount } from "@/lib/amount";
 import { CATEGORIES, type Category } from "@/lib/categories";
 import { formatEUR } from "@/lib/money";
@@ -14,22 +16,12 @@ import { registerExpenseAction } from "./actions";
 export function GastarFlow({ freeLeftCents }: { freeLeftCents: number }) {
   const { text, press } = useAmountInput();
   const [category, setCategory] = useState<Category>("Mercado");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Não foi possível registrar. Tente de novo.");
 
   const cents = amountCents(text);
   const left = freeLeftCents - cents;
 
-  const submit = () =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await registerExpenseAction(cents, category, todayISO());
-      } catch (e) {
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível registrar. Tente de novo.");
-      }
-    });
+  const submit = () => run(() => registerExpenseAction(cents, category, todayISO()));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -53,11 +45,7 @@ export function GastarFlow({ freeLeftCents }: { freeLeftCents: number }) {
             </Chip>
           ))}
         </div>
-        {error && (
-          <p role="alert" className="text-center text-sm text-warn-ink">
-            {error}
-          </p>
-        )}
+        {error && <FormError center>{error}</FormError>}
         <Keypad onPress={press} />
         <Button disabled={cents <= 0 || pending} onClick={submit}>
           {pending ? "Registrando…" : "Registrar gasto"}

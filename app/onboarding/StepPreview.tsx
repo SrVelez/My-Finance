@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { StackedBar } from "@/components/ui/StackedBar";
+import { useAction } from "@/components/ui/useAction";
 import { toEngineState } from "@/lib/draft";
 import { distribute, type Allocation } from "@/lib/engine";
 import { euros, formatEUR } from "@/lib/money";
@@ -15,8 +17,7 @@ import type { StepProps } from "./OnboardingFlow";
 export function StepPreview({ draft, go }: StepProps) {
   const [income, setIncome] = useState(euros(500));
   const [editingIncome, setEditingIncome] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
 
   // Simulação pura: nada é gravado até "Começar a usar".
   const dist = useMemo(
@@ -27,16 +28,7 @@ export function StepPreview({ draft, go }: StepProps) {
   const bills = dist.allocations.filter((a) => a.kind === "bill");
   const goals = dist.allocations.filter((a) => a.kind === "goal");
 
-  const start = () =>
-    startTransition(async () => {
-      try {
-        await finishOnboarding(draft);
-      } catch (e) {
-        // redirect() lança internamente; só mostramos erros reais.
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível salvar. Tente de novo.");
-      }
-    });
+  const start = () => run(() => finishOnboarding(draft));
 
   return (
     <Shell
@@ -46,11 +38,7 @@ export function StepPreview({ draft, go }: StepProps) {
       subtitle="Uma simulação. Nada foi registrado ainda."
       footer={
         <>
-          {error && (
-            <p role="alert" className="text-center text-sm text-warn-ink">
-              {error}
-            </p>
-          )}
+          {error && <FormError center>{error}</FormError>}
           <Button disabled={pending} onClick={start}>
             {pending ? "Salvando…" : "Começar a usar"}
           </Button>

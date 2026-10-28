@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
+import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
+import { useAction } from "@/components/ui/useAction";
 import { createBillAction, deleteBillAction, updateBillAction } from "./actions";
 
 interface Props {
@@ -15,22 +17,9 @@ export function BillForm({ bill }: Props) {
   const [amountCents, setAmountCents] = useState(bill?.amountCents ?? 0);
   const [dueDay, setDueDay] = useState(bill?.dueDay ?? 1);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
 
   const valid = name.trim() !== "" && amountCents > 0 && dueDay >= 1 && dueDay <= 31;
-
-  const run = (fn: () => Promise<void>) =>
-    startTransition(async () => {
-      setError(null);
-      try {
-        await fn();
-      } catch (e) {
-        // redirect() é lançado internamente pelo Next; só mostramos falhas reais.
-        if (e instanceof Error && e.message.startsWith("NEXT_REDIRECT")) throw e;
-        setError("Não foi possível salvar. Tente de novo.");
-      }
-    });
 
   const save = () =>
     run(() =>
@@ -70,11 +59,7 @@ export function BillForm({ bill }: Props) {
             />
           </label>
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-warn-ink">
-            {error}
-          </p>
-        )}
+        {error && <FormError>{error}</FormError>}
       </main>
       <footer className="space-y-2 px-5 pt-4 pb-5">
         <Button disabled={!valid || pending} onClick={save}>
