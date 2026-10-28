@@ -130,3 +130,61 @@ Legenda de verificação: **E2E** = `npx playwright test`; **U** = `vitest`; **N
 ## 9. Observação sobre o `next build`
 
 Em 2 de 3 execuções o `next build` terminou com `exit 1` e uma mensagem de `SecurityFatalError` dizendo que o Next 16.4.0 tem uma vulnerabilidade conhecida; repetir o mesmo comando conclui normalmente. Não rodei nenhum upgrade (a regra "não atualizar versões" vale para esta tarefa). Convém decidir isso numa tarefa separada.
+
+---
+
+# Execução (etapas 2 e 3)
+
+Branch `chore/limpeza-refatoracao`. Cada commit rodou `tsc`, ESLint, Vitest e `next build`; os que mexem em telas rodaram também o e2e completo (9/9 no final).
+
+## O que foi feito
+
+| Commit | Item | Resultado |
+|---|---|---|
+| `test:` caracterização | validate, `sanitizeDraft`, `weekStats` | +16 testes, escritos **antes** das refatorações e passando contra o código antigo |
+| `refactor:` constante e `.env.example` | R-8 | `MIN_RECEBIMENTOS` único (UI + serviço); `MetaStatus` deixou de ser exportado; `.env.example` criado e liberado no `.gitignore` |
+| `refactor:` `MAX_CENTS` e `isDeadline` | R-2 | teto de valor e regex de prazo únicos em `lib/validate.ts` (a cópia de `goals.ts` **não foi tocada**, ver §4) |
+| `refactor:` `weekPool`/`weekSpent` | R-4 | fórmula do livre da semana só em `lib/engine/week.ts`, usada por `weekStats` e pelo ritmo do Resumo (+3 testes) |
+| `refactor:` `useAction` e `FormError` | R-1 | 8 cópias do `try/catch NEXT_REDIRECT` e 6 parágrafos de erro viraram 1 hook e 1 componente. Única diferença de comportamento: a tela final do onboarding agora limpa o erro anterior ao tentar de novo (as demais já faziam isso) |
+| `refactor:` `previewAllocations` | R-5 | aritmética de prévia do "Ajustar" saiu de `ReceberFlow` para o motor (+4 testes); `GastarFlow` usa `freeAfterExpense` |
+| `refactor:` `ProgressBar` | R-6 | `ProgressBar` ganhou `size`, `fillClassName` e `marker`; as 3 barras inline do Resumo usam o componente. Screenshots em 390px antes/depois: idênticos |
+
+## O que ficou de fora (e por quê)
+
+- **R-3 (`cache()` em `getOrCreateUser`): adiado.** Após uma Server Action o Next re-renderiza a página na mesma requisição; um cache por requisição poderia devolver o usuário antigo (nome/gasto semanal recém-salvos). Não consigo provar o contrário com os testes atuais, e o ganho é pequeno. Precisa de um teste de integração de Server Action antes.
+- **R-7 (formatação nos eixos dos gráficos): não feito.** Não estava na lista que recomendei; ganho mínimo.
+- **Bug da regex de prazo (§4): não corrigido**, aguardando sua decisão.
+- **Cobertura de testes: não medida** (sem `@vitest/coverage-v8`), aguardando sua decisão.
+- **Remoções:** não havia nada seguro para remover (§2). Os 4 exports "não usados" que sobram no `knip` são API do motor e fixtures de teste (§3).
+
+## Antes e depois
+
+| Métrica | Antes (`09a7a5f`) | Depois | Obs. |
+|---|---|---|---|
+| Linhas de código (rastreadas) | 7.622 | 7.790 | +168, mas **só por testes**: código de produção caiu |
+| `app` | 3.182 | 3.048 | −134 |
+| `components` | 603 | 658 | +55 (hook e componente novos) |
+| `lib` | 2.302 | 2.347 | +45 (`week.ts`, `previewAllocations`, constantes) |
+| `tests` | 744 | 946 | +202 |
+| Arquivos rastreados | 146 | 154 | +8 (4 de teste, 3 de código, `.env.example`) |
+| Testes Vitest | 55 | 78 | +23 |
+| Testes e2e | 9 | 9 | todos passando |
+| Dependências (prod / dev) | 9 / 11 | 9 / 11 | sem mudança |
+| Erros / avisos de lint | 0 / 0 | 0 / 0 | |
+| Exports sem uso (knip) | 8 + 1 tipo | 4 (+ `sw.js`, falso positivo) | |
+| Cópias do padrão `NEXT_REDIRECT` | 8 | 1 | |
+| Cópias da fórmula do livre da semana | 2 | 1 | |
+| Cobertura de testes | não medida | não medida | |
+| JS estático total | 1.142.331 B (345.257 B gzip) | 1.148.984 B (346.500 B gzip) | +0,6% |
+
+**Bundles por rota** (JS específico da rota, bruto / gzip): quase tudo igual. Mudanças: `/gastar` **27 → 31 KB** (9 → 11 KB gzip), porque agora importa `freeAfterExpense` do motor e o motor passa a entrar nesse bundle; `/onboarding` 80 → 81 KB; `/metas/nova`, `/metas/[id]/editar` e `/contas/nova`/`editar` +1 KB gzip ou menos. Se o peso de `/gastar` incomodar, dá para voltar à subtração inline naquele componente (perde a fonte única da fórmula).
+
+## O que testar no celular antes de juntar a branch
+
+1. **Recebi:** informe €2000 → Ver distribuição → toque em **Ajustar**, edite um valor e confira o livre e o "dia a dia + folga"; passe do total e veja o aviso vermelho e o botão bloqueado → Confirmar.
+2. **Recebi pouco** (ex.: €280): tela "Faltaram €X" com as duas opções.
+3. **Gastei:** digite um valor maior que o livre e confira "Passa €X do livre desta semana".
+4. **Erros de formulário:** coloque o celular em modo avião e tente salvar uma conta, uma meta e os ajustes: deve aparecer a mensagem de erro (centralizada em Ajustes/Gastei/Recebi, à esquerda em Conta/Meta).
+5. **Resumo:** as 3 abas (Semana/Mês/3 meses), barras de metas com o traço de "ritmo esperado", categorias e cobertura.
+6. **Onboarding** completo até "Começar a usar".
+7. Confira que o arquivo `docs/GUIA-DE-ESTUDO.md` aparece apagado no seu working tree, **não foi feito por esta tarefa**.
