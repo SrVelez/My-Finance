@@ -1,3 +1,4 @@
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { Dashboard } from "@/lib/dashboard/types";
 import { formatEUR } from "@/lib/money";
 
@@ -16,16 +17,7 @@ export function CategoriasCard({ categorias, frase }: { categorias: NonNullable<
                   {formatEUR(c.totalCents)} · {c.pct}%
                 </span>
               </div>
-              <div
-                role="progressbar"
-                aria-label={`Gasto em ${c.categoria}`}
-                aria-valuemin={0}
-                aria-valuemax={maior}
-                aria-valuenow={c.totalCents}
-                className="h-2 w-full overflow-hidden rounded-full bg-line"
-              >
-                <div className="h-full rounded-full bg-chart-free" style={{ width: `${maior > 0 ? (c.totalCents / maior) * 100 : 0}%` }} />
-              </div>
+              <ProgressBar label={`Gasto em ${c.categoria}`} value={c.totalCents} max={maior} size="md" fillClassName="bg-chart-free" />
             </li>
           ))}
         </ul>

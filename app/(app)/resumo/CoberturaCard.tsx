@@ -1,3 +1,4 @@
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { Dashboard } from "@/lib/dashboard/types";
 import { formatEUR } from "@/lib/money";
 
@@ -9,16 +10,7 @@ export function CoberturaCard({ c }: { c: Dashboard["proximoMes"] }) {
         <p className="text-sm font-semibold">{c.frase}</p>
         {c.totalCents > 0 && (
           <>
-            <div
-              role="progressbar"
-              aria-label="Contas fixas cobertas"
-              aria-valuemin={0}
-              aria-valuemax={c.totalCents}
-              aria-valuenow={c.guardadoCents}
-              className="h-2.5 w-full overflow-hidden rounded-full bg-line"
-            >
-              <div className="h-full rounded-full bg-chart-bills" style={{ width: `${(c.guardadoCents / c.totalCents) * 100}%` }} />
-            </div>
+            <ProgressBar label="Contas fixas cobertas" value={c.guardadoCents} max={c.totalCents} size="lg" fillClassName="bg-chart-bills" />
             <p className="flex justify-between text-xs text-muted">
               <span>{formatEUR(c.guardadoCents)} guardados</span>
               <span>de {formatEUR(c.totalCents)}</span>
