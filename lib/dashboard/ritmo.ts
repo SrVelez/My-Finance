@@ -1,18 +1,12 @@
-import { addDays, type ISODate } from "@/lib/engine";
-import { formatEUR, roundToEuro, type Cents } from "@/lib/money";
+import { addDays, weekPool, type ISODate } from "@/lib/engine";
+import { formatEUR, roundToEuro } from "@/lib/money";
 import type { Dashboard, DashTx } from "./types";
 
 type Ritmo = NonNullable<Dashboard["ritmoSemana"]>;
 
-/** Livre da semana: recebido − guardado + retirado de metas (mesma regra do Início). */
-export function livreDaSemana(txs: DashTx[]): Cents {
-  const sum = (type: string) => txs.filter((t) => t.type === type).reduce((s, t) => s + t.amountCents, 0);
-  return sum("income") - sum("allocation") + sum("withdrawal");
-}
-
 /** Gasto acumulado por dia contra o ritmo ideal (linear de €0 até o livre da semana). */
 export function buildRitmo(weekTxs: DashTx[], weekStart: ISODate, today: ISODate): Ritmo {
-  const livreCents = livreDaSemana(weekTxs);
+  const livreCents = weekPool(weekTxs);
   const expenses = weekTxs.filter((t) => t.type === "expense");
 
   const dias = Array.from({ length: 7 }, (_, i) => {

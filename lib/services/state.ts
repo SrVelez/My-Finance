@@ -1,6 +1,6 @@
 import type { Bill, Goal } from "@prisma/client";
 import { db } from "@/lib/db";
-import { weekRange, type EngineBill, type EngineGoal, type EngineState, type ISODate } from "@/lib/engine";
+import { weekPool, weekRange, weekSpent, type EngineBill, type EngineGoal, type EngineState, type ISODate } from "@/lib/engine";
 import type { Cents } from "@/lib/money";
 import { todayISO } from "@/lib/today";
 import { getOrCreateUser } from "./user";
@@ -76,8 +76,7 @@ export async function weekStats(userId: string, date: ISODate, weekStartDay: num
     where: { userId, date: { gte: toDbDate(start), lte: toDbDate(end) } },
     select: { type: true, amountCents: true },
   });
-  const sum = (type: string) => txs.filter((t) => t.type === type).reduce((s, t) => s + t.amountCents, 0);
-  const poolCents = sum("income") - sum("allocation") + sum("withdrawal");
-  const spentCents = sum("expense");
+  const poolCents = weekPool(txs);
+  const spentCents = weekSpent(txs);
   return { start, end, poolCents, spentCents, freeLeftCents: poolCents - spentCents };
 }
