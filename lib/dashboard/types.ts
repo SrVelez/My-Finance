@@ -3,7 +3,10 @@ import type { Cents } from "@/lib/money";
 export type Periodo = "semana" | "mes" | "3meses";
 export const PERIODOS: readonly Periodo[] = ["semana", "mes", "3meses"];
 
-export type MetaStatus = "no_ritmo" | "atrasada" | "sem_prazo" | "concluida";
+/** Mínimo de recebimentos para os gráficos de tendência fazerem sentido. */
+export const MIN_RECEBIMENTOS = 3;
+
+type MetaStatus = "no_ritmo" | "atrasada" | "sem_prazo" | "concluida";
 
 export interface DetalheItem {
   data: string;

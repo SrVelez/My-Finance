@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Dashboard, Periodo } from "@/lib/dashboard/types";
+import { MIN_RECEBIMENTOS, type Dashboard, type Periodo } from "@/lib/dashboard/types";
 import { CategoriasCard } from "./CategoriasCard";
 import { CoberturaCard } from "./CoberturaCard";
 import { DestaquesCards } from "./DestaquesCards";
@@ -80,10 +80,10 @@ export function ResumoView() {
 }
 
 function Conteudo({ d }: { d: Dashboard }) {
-  const faltam = Math.max(0, 3 - d.dadosSuficientes.recebimentosTotais);
+  const faltam = Math.max(0, MIN_RECEBIMENTOS - d.dadosSuficientes.recebimentosTotais);
   const semHistorico = (
     <p className="rounded-card border border-line bg-surface p-4 text-sm text-muted">
-      Seu histórico aparece depois de 3 recebimentos. Faltam {faltam}.
+      Seu histórico aparece depois de {MIN_RECEBIMENTOS} recebimentos. Faltam {faltam}.
     </p>
   );
 

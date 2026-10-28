@@ -7,10 +7,7 @@ import { buildMetas } from "./metas";
 import { intervaloAnterior, intervaloDo, noIntervalo } from "./periodo";
 import { buildRecebimentos, recebimentosFrase } from "./recebimentos";
 import { buildRitmo } from "./ritmo";
-import type { DashBill, DashGoal, DashTx, Dashboard, Periodo } from "./types";
-
-/** Mínimo de recebimentos para os gráficos de tendência fazerem sentido. */
-export const MIN_RECEBIMENTOS = 3;
+import { MIN_RECEBIMENTOS, type DashBill, type DashGoal, type DashTx, type Dashboard, type Periodo } from "./types";
 
 export interface DashboardInput {
   periodo: Periodo;
