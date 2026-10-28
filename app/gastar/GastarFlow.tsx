@@ -9,6 +9,7 @@ import { Keypad, useAmountInput } from "@/components/ui/Keypad";
 import { useAction } from "@/components/ui/useAction";
 import { amountCents, displayAmount } from "@/lib/amount";
 import { CATEGORIES, type Category } from "@/lib/categories";
+import { freeAfterExpense } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
 import { todayISO } from "@/lib/today";
 import { registerExpenseAction } from "./actions";
@@ -19,7 +20,7 @@ export function GastarFlow({ freeLeftCents }: { freeLeftCents: number }) {
   const { run, pending, error } = useAction("Não foi possível registrar. Tente de novo.");
 
   const cents = amountCents(text);
-  const left = freeLeftCents - cents;
+  const left = freeAfterExpense(freeLeftCents, cents);
 
   const submit = () => run(() => registerExpenseAction(cents, category, todayISO()));
 

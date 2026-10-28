@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { euros } from "@/lib/money";
-import { coverShortfallFromReserve, distribute, freeAfterExpense } from "@/lib/engine";
+import { coverShortfallFromReserve, distribute, freeAfterExpense, previewAllocations } from "@/lib/engine";
 import { midCycleState, zeroState } from "./fixtures";
 
 const amounts = (d: ReturnType<typeof distribute>) =>
@@ -92,5 +92,30 @@ describe("caso 5 — simulação não altera saldos", () => {
     expect(JSON.stringify(state)).toBe(before);
     expect(state.bills.every((b) => b.savedCents === 0)).toBe(true);
     expect(state.goals.every((g) => g.savedCents === 0)).toBe(true);
+  });
+});
+
+describe("previewAllocations", () => {
+  it("livre = recebido − guardado; dia a dia limitado ao gasto semanal", () => {
+    expect(previewAllocations(euros(500), [euros(196), euros(58)], euros(120))).toEqual({
+      toSaveCents: euros(254),
+      freeCents: euros(246),
+      livingCents: euros(120),
+      over: false,
+    });
+  });
+  it("livre menor que o gasto semanal: o dia a dia leva tudo", () => {
+    expect(previewAllocations(euros(300), [euros(250)], euros(120))).toMatchObject({ freeCents: euros(50), livingCents: euros(50), over: false });
+  });
+  it("valores acima do recebido: livre negativo, dia a dia zero e aviso", () => {
+    expect(previewAllocations(euros(100), [euros(150)], euros(120))).toEqual({
+      toSaveCents: euros(150),
+      freeCents: -euros(50),
+      livingCents: 0,
+      over: true,
+    });
+  });
+  it("sem valores: tudo é livre", () => {
+    expect(previewAllocations(euros(80), [], euros(120))).toMatchObject({ toSaveCents: 0, freeCents: euros(80), livingCents: euros(80) });
   });
 });

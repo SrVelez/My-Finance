@@ -8,7 +8,7 @@ import { Keypad, useAmountInput } from "@/components/ui/Keypad";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { useAction } from "@/components/ui/useAction";
 import { amountCents, displayAmount } from "@/lib/amount";
-import { formatDateChip } from "@/lib/engine";
+import { formatDateChip, previewAllocations } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
 import type { IncomeSimulation } from "@/lib/services/income";
 import { todayISO } from "@/lib/today";
@@ -79,10 +79,12 @@ function Distribution({ sim, back }: { sim: IncomeSimulation; back: () => void }
   );
   const { run, pending, error } = useAction("Não foi possível confirmar. Tente de novo.");
 
-  const toSave = d.allocations.reduce((s, a) => s + (values[a.id] ?? 0), 0);
-  const free = incomeCents - toSave;
-  const living = Math.min(sim.weeklyLivingCents, Math.max(free, 0));
-  const over = free < 0;
+  const {
+    toSaveCents: toSave,
+    freeCents: free,
+    livingCents: living,
+    over,
+  } = previewAllocations(incomeCents, d.allocations.map((a) => values[a.id] ?? 0), sim.weeklyLivingCents);
 
   const confirm = () => run(() => confirmIncomeAction({ incomeCents, date, overrides: editing ? values : undefined }));
 

@@ -89,3 +89,30 @@ export function coverShortfallFromReserve(dist: Distribution, goals: EngineGoal[
 /** "Gastei": quanto sobra livre na semana depois de uma despesa. */
 export const freeAfterExpense = (freeCents: Cents, expenseCents: Cents): Cents =>
   freeCents - expenseCents;
+
+export interface AllocationPreview {
+  /** Soma do que será guardado (contas + metas). */
+  toSaveCents: Cents;
+  /** Livre para gastar = recebido − guardado (negativo se os valores passam do recebido). */
+  freeCents: Cents;
+  /** Parte do livre que cobre o dia a dia (no máximo o gasto semanal). */
+  livingCents: Cents;
+  /** Os valores passam do que foi recebido. */
+  over: boolean;
+}
+
+/** "Ajustar": recalcula o resumo quando o usuário edita os valores sugeridos (só pré-visualização). */
+export function previewAllocations(
+  incomeCents: Cents,
+  amountsCents: Cents[],
+  weeklyLivingCents: Cents,
+): AllocationPreview {
+  const toSaveCents = amountsCents.reduce((s, a) => s + a, 0);
+  const freeCents = incomeCents - toSaveCents;
+  return {
+    toSaveCents,
+    freeCents,
+    livingCents: Math.min(weeklyLivingCents, Math.max(freeCents, 0)),
+    over: freeCents < 0,
+  };
+}
