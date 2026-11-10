@@ -221,3 +221,9 @@ export async function undoBatch(groupId: string, today: ISODate) {
 export async function resetAllBalances(today: ISODate) {
   return resetAllBalancesFor(await current(), today);
 }
+
+/** Quanto ainda há de livre na semana (para a folha "Ajustar saldo" bloquear "tirar do livre"). */
+export async function getFreeLeft(today: ISODate): Promise<Cents> {
+  const user = await getOrCreateUser();
+  return (await weekStats(user.id, today, user.weekStartDay)).freeLeftCents;
+}

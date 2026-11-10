@@ -1,8 +1,9 @@
 import { formatEUR, type Cents } from "@/lib/money";
 import { MAX_CENTS } from "@/lib/validate";
 import { lastDueOnOrBefore } from "./dates";
-import { openDueAmount } from "./bills";
-import type { EngineBill, ISODate } from "./types";
+import { openDueAmount, planBill, settleBill } from "./bills";
+import { planGoal } from "./goals";
+import type { EngineBill, EngineGoal, ISODate } from "./types";
 import type { WeekTx } from "./week";
 
 /** Por que o saldo de uma conta ou meta foi corrigido à mão. */
@@ -132,4 +133,44 @@ export function checkGoalOpening(cents: Cents, targetCents: Cents): GoalOpeningC
   if (!Number.isInteger(cents) || cents < 0) return { ok: false, error: "Informe um valor maior ou igual a zero." };
   if (cents > MAX_CENTS) return { ok: false, error: "Valor muito alto." };
   return { ok: true, savedCents: cents, completes: targetCents > 0 && cents >= targetCents };
+}
+
+/** O que muda no plano quando o saldo é corrigido (para a prévia da folha "Ajustar saldo"). */
+export interface AdjustPreview {
+  pctBefore: number;
+  pctAfter: number;
+  /** Quanto o plano separa por recebimento/semana antes e depois. */
+  weeklyBeforeCents: Cents;
+  weeklyAfterCents: Cents;
+  /** Quanto falta guardar antes e depois. */
+  faltaBeforeCents: Cents;
+  faltaAfterCents: Cents;
+}
+
+const pctOf = (part: Cents, total: Cents) => (total > 0 ? Math.min(100, Math.round((part / total) * 100)) : 0);
+
+export function previewGoalAdjustment(goal: EngineGoal, newCents: Cents, today: ISODate): AdjustPreview {
+  const after = { ...goal, savedCents: newCents };
+  return {
+    pctBefore: pctOf(goal.savedCents, goal.targetCents),
+    pctAfter: pctOf(newCents, goal.targetCents),
+    weeklyBeforeCents: planGoal(goal, today).amountCents,
+    weeklyAfterCents: planGoal(after, today).amountCents,
+    faltaBeforeCents: Math.max(0, goal.targetCents - goal.savedCents),
+    faltaAfterCents: Math.max(0, goal.targetCents - newCents),
+  };
+}
+
+export function previewBillAdjustment(bill: EngineBill, newCents: Cents, today: ISODate): AdjustPreview {
+  const settled = settleBill(bill, today);
+  const h = billHolding(settled);
+  const after = h.overdue ? { ...settled, consumedCents: newCents } : { ...settled, savedCents: newCents };
+  return {
+    pctBefore: pctOf(h.haveCents, h.targetCents),
+    pctAfter: pctOf(newCents, h.targetCents),
+    weeklyBeforeCents: planBill(settled, today).amountCents,
+    weeklyAfterCents: planBill(after, today).amountCents,
+    faltaBeforeCents: Math.max(0, h.targetCents - h.haveCents),
+    faltaAfterCents: Math.max(0, h.targetCents - newCents),
+  };
 }

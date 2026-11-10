@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { AdjustBalance } from "@/components/AdjustBalance";
 import { FlowHeader } from "@/components/FlowHeader";
 import { HistoryList } from "@/components/HistoryList";
 import { MoveMoney } from "@/components/MoveMoney";
@@ -8,7 +9,10 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { formatMonthYear } from "@/lib/engine";
 import { goalStatus } from "@/lib/goalStatus";
 import { formatEUR } from "@/lib/money";
+import { getFreeLeft } from "@/lib/services/balance";
+import { getGoal } from "@/lib/services/goals";
 import { getGoalDetail } from "@/lib/services/history";
+import { toGoalState } from "@/lib/services/state";
 import { serverToday } from "@/lib/services/today";
 import { DeadlineChoicePanel } from "../DeadlineChoice";
 
@@ -26,6 +30,8 @@ async function Meta({ params }: { params: PageProps<"/metas/[id]">["params"] }) 
   const detail = await getGoalDetail(id, today);
   if (!detail) notFound();
   const { goal, history } = detail;
+  const [row, freeLeftCents] = await Promise.all([getGoal(id), getFreeLeft(today)]);
+  if (!row) notFound();
   const pct = goal.targetCents > 0 ? Math.round((goal.savedCents / goal.targetCents) * 100) : 0;
   const status = goalStatus(goal);
 
@@ -70,6 +76,15 @@ async function Meta({ params }: { params: PageProps<"/metas/[id]">["params"] }) 
         </section>
 
         <MoveMoney kind="goal" id={goal.id} canIn={!goal.complete} canOut={goal.savedCents > 0} />
+        <AdjustBalance
+          kind="goal"
+          id={goal.id}
+          name={goal.name}
+          haveCents={goal.savedCents}
+          freeLeftCents={freeLeftCents}
+          today={today}
+          engineGoal={toGoalState(row)}
+        />
 
         <section>
           <h2 className="mb-2 font-bold">Extrato</h2>

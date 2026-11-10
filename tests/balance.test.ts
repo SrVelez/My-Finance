@@ -8,6 +8,8 @@ import {
   distribute,
   planBill,
   planGoal,
+  previewBillAdjustment,
+  previewGoalAdjustment,
   settleBill,
   weekPool,
   weekTxsOf,
@@ -169,5 +171,24 @@ describe("estado base", () => {
   it("o motor não mudou: distribuição do estado base continua igual", () => {
     const d = distribute({ incomeCents: euros(500), date: "2026-10-08", state: zeroState(), assumeFreshCycle: true });
     expect(d.toSaveCents + d.livingCents + d.slackCents).toBe(euros(500));
+  });
+});
+
+describe("prévia do ajuste de saldo", () => {
+  it("meta: zerar a reserva leva o progresso a 0% e mantém o valor semanal sem prazo", () => {
+    const reserva = goal({ id: "r", name: "Reserva", targetCents: euros(400), savedCents: euros(150), weeklyCents: euros(25), priority: 1, isEmergency: true });
+    const p = previewGoalAdjustment(reserva, 0, TODAY);
+    expect(p).toMatchObject({ pctBefore: 38, pctAfter: 0, weeklyBeforeCents: euros(25), weeklyAfterCents: euros(25), faltaAfterCents: euros(400) });
+  });
+  it("meta com prazo: menos saldo, mais valor por semana", () => {
+    const viagem = goal({ id: "v", name: "Viagem", targetCents: euros(600), savedCents: euros(200), deadline: "2027-06", priority: 1 });
+    const p = previewGoalAdjustment(viagem, 0, TODAY);
+    expect(p.weeklyBeforeCents).toBe(euros(13));
+    expect(p.weeklyAfterCents).toBe(euros(19));
+  });
+  it("conta: zerar volta a exigir o valor cheio dividido pelo ciclo", () => {
+    const aluguel = bill({ id: "a", name: "Aluguel", amountCents: euros(640), dueDay: 1, savedCents: euros(200), createdOn: TODAY });
+    const p = previewBillAdjustment(aluguel, 0, TODAY);
+    expect(p).toMatchObject({ pctBefore: 31, pctAfter: 0, weeklyBeforeCents: euros(147), weeklyAfterCents: euros(160), faltaAfterCents: euros(640) });
   });
 });

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { AdjustBalance } from "@/components/AdjustBalance";
 import { ConfirmPayment } from "@/components/ConfirmPayment";
 import { FlowHeader } from "@/components/FlowHeader";
 import { HistoryList } from "@/components/HistoryList";
@@ -9,7 +10,10 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { dueSoonLabel } from "@/lib/dueLabel";
 import { formatDateChip, weekdayShort } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
+import { getFreeLeft } from "@/lib/services/balance";
+import { getBill } from "@/lib/services/bills";
 import { getBillDetail } from "@/lib/services/history";
+import { toBillState } from "@/lib/services/state";
 import { serverToday } from "@/lib/services/today";
 
 export default function ContaPage({ params }: PageProps<"/contas/[id]">) {
@@ -26,6 +30,8 @@ async function Conta({ params }: { params: PageProps<"/contas/[id]">["params"] }
   const detail = await getBillDetail(id, today);
   if (!detail) notFound();
   const { bill, history } = detail;
+  const [row, freeLeftCents] = await Promise.all([getBill(id), getFreeLeft(today)]);
+  if (!row) notFound();
   const overdue = bill.open?.kind === "overdue";
   const soon = dueSoonLabel(bill.daysLeft);
   const falta = bill.targetCents - bill.savedCents;
@@ -72,6 +78,16 @@ async function Conta({ params }: { params: PageProps<"/contas/[id]">["params"] }
         </section>
 
         <MoveMoney kind="bill" id={bill.id} canIn={!bill.covered} canOut={bill.savedCents > 0} />
+        <AdjustBalance
+          kind="bill"
+          id={bill.id}
+          name={bill.name}
+          haveCents={bill.savedCents}
+          maxCents={bill.targetCents}
+          freeLeftCents={freeLeftCents}
+          today={today}
+          engineBill={toBillState(row)}
+        />
 
         <section>
           <h2 className="mb-2 font-bold">Extrato</h2>
