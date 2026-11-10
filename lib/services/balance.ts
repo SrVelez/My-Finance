@@ -175,37 +175,40 @@ export async function undoBatchFor(user: BalanceUser, groupId: string, today: IS
  * prazos, prioridades e histórico. Um `adjustment` (motivo `reset`) por item, num mesmo grupo.
  */
 export async function resetAllBalancesFor(user: BalanceUser, today: ISODate): Promise<ResetResult> {
-  return db.$transaction(async (tx): Promise<ResetResult> => {
-    const groupId = randomUUID();
-    const bills = await tx.bill.findMany({ where: { userId: user.id, ...active }, orderBy: { id: "asc" }, select: { id: true } });
-    const goals = await tx.goal.findMany({ where: { userId: user.id, ...active }, orderBy: { priority: "asc" }, select: { id: true } });
-    const holdings: Holding[] = [];
-    for (const [kind, rows] of [["bill", bills], ["goal", goals]] as const) {
-      for (const r of rows) {
-        const h = await loadHolding(tx, user.id, kind, r.id, today);
-        if (h && h.haveCents > 0) holdings.push(h);
-      }
-    }
+  return db.$transaction((tx) => resetAllIn(tx, user, today));
+}
 
-    for (const h of holdings) {
-      await writeBalance(tx, h, 0);
-      await tx.transaction.create({
-        data: {
-          userId: user.id,
-          type: "adjustment",
-          amountCents: -h.haveCents,
-          reason: "reset",
-          affectsWeeklyFree: false,
-          date: toDbDate(today),
-          note: h.name,
-          balanceAfterCents: 0,
-          groupId,
-          ...itemRef(h),
-        },
-      });
+/** O mesmo, dentro de uma transação já aberta (usado também por "Substituir pelo novo plano"). */
+export async function resetAllIn(tx: Tx, user: BalanceUser, today: ISODate): Promise<ResetResult> {
+  const groupId = randomUUID();
+  const bills = await tx.bill.findMany({ where: { userId: user.id, ...active }, orderBy: { id: "asc" }, select: { id: true } });
+  const goals = await tx.goal.findMany({ where: { userId: user.id, ...active }, orderBy: { priority: "asc" }, select: { id: true } });
+  const holdings: Holding[] = [];
+  for (const [kind, rows] of [["bill", bills], ["goal", goals]] as const) {
+    for (const r of rows) {
+      const h = await loadHolding(tx, user.id, kind, r.id, today);
+      if (h && h.haveCents > 0) holdings.push(h);
     }
-    return { ok: true, count: holdings.length, groupId };
-  });
+  }
+
+  for (const h of holdings) {
+    await writeBalance(tx, h, 0);
+    await tx.transaction.create({
+      data: {
+        userId: user.id,
+        type: "adjustment",
+        amountCents: -h.haveCents,
+        reason: "reset",
+        affectsWeeklyFree: false,
+        date: toDbDate(today),
+        note: h.name,
+        balanceAfterCents: 0,
+        groupId,
+        ...itemRef(h),
+      },
+    });
+  }
+  return { ok: true, count: holdings.length, groupId };
 }
 
 // Versões que recebem só o `userId` da sessão (a configuração da semana vem do banco).

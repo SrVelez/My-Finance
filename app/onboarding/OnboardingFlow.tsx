@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { OnboardingDraft } from "@/lib/draft";
+import { newDraftId, parseStored, useStoredDraftRaw, writeStored } from "@/lib/draftStorage";
 import { StepBills } from "./StepBills";
 import { StepGoals } from "./StepGoals";
 import { StepPriorities } from "./StepPriorities";
@@ -15,11 +16,23 @@ export interface StepProps {
   go: (step: Step) => void;
 }
 
+const EMPTY: OnboardingDraft = { weeklyLivingCents: 0, bills: [], goals: [] };
+
+/**
+ * Onboarding sem login: o rascunho é guardado no aparelho (com um `draftId`) e só vira dados da
+ * conta depois do login, em "Salve seu plano".
+ */
 export function OnboardingFlow() {
   const [step, setStep] = useState<Step>(1);
-  const [draft, setDraft] = useState<OnboardingDraft>({ weeklyLivingCents: 0, bills: [], goals: [] });
+  const raw = useStoredDraftRaw();
+  const stored = useMemo(() => parseStored(raw), [raw]);
+  const current = stored ?? { draftId: "", draft: EMPTY };
 
-  const props: StepProps = { draft, update: (fn) => setDraft(fn), go: setStep };
+  const update: StepProps["update"] = (fn) => {
+    writeStored({ draftId: current.draftId || newDraftId(), draft: fn(current.draft) });
+  };
+
+  const props: StepProps = { draft: current.draft, update, go: setStep };
 
   if (step === 1) return <StepBills {...props} />;
   if (step === 2) return <StepGoals {...props} />;

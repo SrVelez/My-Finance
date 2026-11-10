@@ -1,23 +1,22 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { StackedBar } from "@/components/ui/StackedBar";
-import { useAction } from "@/components/ui/useAction";
 import { toEngineState } from "@/lib/draft";
 import { distribute, type Allocation } from "@/lib/engine";
 import { euros, formatEUR } from "@/lib/money";
 import { todayISO } from "@/lib/today";
-import { finishOnboarding } from "./actions";
 import { Shell } from "./Shell";
 import type { StepProps } from "./OnboardingFlow";
 
 export function StepPreview({ draft, go }: StepProps) {
   const [income, setIncome] = useState(euros(500));
   const [editingIncome, setEditingIncome] = useState(false);
-  const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
+  const router = useRouter();
+  const [going, setGoing] = useState(false);
 
   // Simulação pura: nada é gravado até "Começar a usar".
   const dist = useMemo(
@@ -28,7 +27,11 @@ export function StepPreview({ draft, go }: StepProps) {
   const bills = dist.allocations.filter((a) => a.kind === "bill");
   const goals = dist.allocations.filter((a) => a.kind === "goal");
 
-  const start = () => run(() => finishOnboarding(draft));
+  // O plano só vira dados da conta depois do login ("Salve seu plano"); até aqui é só o rascunho local.
+  const start = () => {
+    setGoing(true);
+    router.push("/entrar?etapa=plano");
+  };
 
   return (
     <Shell
@@ -38,9 +41,8 @@ export function StepPreview({ draft, go }: StepProps) {
       subtitle="Uma simulação. Nada foi registrado ainda."
       footer={
         <>
-          {error && <FormError center>{error}</FormError>}
-          <Button disabled={pending} onClick={start}>
-            {pending ? "Salvando…" : "Começar a usar"}
+          <Button disabled={going} onClick={start}>
+            {going ? "Abrindo…" : "Começar a usar"}
           </Button>
           <Button variant="ghost" onClick={() => go(draft.goals.length ? 3 : 2)}>
             Ajustar prioridades

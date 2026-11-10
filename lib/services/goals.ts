@@ -99,7 +99,7 @@ export async function createGoalIn(
   const opening = checkGoalOpening(openingCents, input.targetCents);
   if (!opening.ok) throw new Error(opening.error);
 
-  const last = await tx.goal.aggregate({ where: { userId }, _max: { priority: true } });
+  const last = await tx.goal.aggregate({ where: { userId, ...active }, _max: { priority: true } });
   const goal = await tx.goal.create({
     data: {
       userId,

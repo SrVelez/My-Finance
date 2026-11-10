@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "@/lib/db";
 import { OTP_MINUTES, sendOtpEmail } from "./email";
+import { appleConfig, googleConfig } from "./providers";
 import { allowOtpSend } from "./throttle";
 
 /** Endereço público do app (cookies, passkeys e links). Em produção, o https:// do domínio. */
@@ -13,18 +14,6 @@ const isHttps = baseURL.startsWith("https://");
 
 /** Origens extras aceitas (ex.: o IP da rede local para abrir o app no celular), separadas por vírgula. */
 const trustedOrigins = [baseURL, ...(process.env.AUTH_TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean)];
-
-const apple =
-  process.env.AUTH_APPLE_ENABLED === "true" && process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET
-    ? { clientId: process.env.APPLE_CLIENT_ID, clientSecret: process.env.APPLE_CLIENT_SECRET }
-    : undefined;
-const google =
-  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-    ? { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }
-    : undefined;
-
-/** Quais "Continuar com…" estão ligados (a tela de entrada só mostra os ligados). */
-export const enabledProviders = { google: !!google, apple: !!apple };
 
 export const auth = betterAuth({
   appName: "Finança",
@@ -53,7 +42,7 @@ export const auth = betterAuth({
 
   // Entrar com Google numa conta que já existe por e-mail usa a mesma conta (nunca cria outra).
   account: { accountLinking: { enabled: true, trustedProviders: ["google", "apple"] } },
-  socialProviders: { ...(google ? { google } : {}), ...(apple ? { apple } : {}) },
+  socialProviders: { ...(googleConfig ? { google: googleConfig } : {}), ...(appleConfig ? { apple: appleConfig } : {}) },
 
   plugins: [
     emailOTP({
