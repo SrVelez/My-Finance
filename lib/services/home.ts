@@ -15,9 +15,9 @@ export interface HomeData {
   goals: { id: string; name: string; savedCents: Cents; targetCents: Cents }[];
 }
 
-export async function getHomeData(today: ISODate): Promise<HomeData> {
-  const { user, state } = await loadState();
-  const [week, bills] = await Promise.all([weekStats(user.id, today, user.weekStartDay), listBills(today)]);
+export async function getHomeData(userId: string, today: ISODate): Promise<HomeData> {
+  const { user, state } = await loadState(userId);
+  const [week, bills] = await Promise.all([weekStats(user.id, today, user.weekStartDay), listBills(userId, today)]);
 
   return {
     name: user.name,

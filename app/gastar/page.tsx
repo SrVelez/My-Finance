@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { requireUser } from "@/lib/auth/session";
 import { getHomeData } from "@/lib/services/home";
 import { serverToday } from "@/lib/services/today";
 import { GastarFlow } from "./GastarFlow";
@@ -12,6 +13,7 @@ export default function GastarPage() {
 }
 
 async function GastarLoader() {
-  const { freeLeftCents } = await getHomeData(await serverToday());
+  const { userId } = await requireUser();
+  const { freeLeftCents } = await getHomeData(userId, await serverToday());
   return <GastarFlow freeLeftCents={freeLeftCents} />;
 }

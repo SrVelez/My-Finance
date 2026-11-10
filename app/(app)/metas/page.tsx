@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { formatEUR } from "@/lib/money";
+import { requireUser } from "@/lib/auth/session";
 import { listGoals } from "@/lib/services/goals";
 import { serverToday } from "@/lib/services/today";
 import { GoalsList } from "./GoalsList";
@@ -14,7 +15,8 @@ export default function MetasPage() {
 }
 
 async function Metas() {
-  const { savedCents, weeklyCents, goals } = await listGoals(await serverToday());
+  const { userId } = await requireUser();
+  const { savedCents, weeklyCents, goals } = await listGoals(userId, await serverToday());
   return (
     <main className="flex-1 space-y-4 px-5 pt-5 pb-6">
       <header>

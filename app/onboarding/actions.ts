@@ -2,10 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { sanitizeDraft } from "@/lib/draft";
-import { completeOnboarding } from "@/lib/services/onboarding";
+import { requireUser } from "@/lib/auth/session";
+import { completeOnboardingFor } from "@/lib/services/onboarding";
 import { serverToday } from "@/lib/services/today";
 
 export async function finishOnboarding(draft: unknown) {
-  await completeOnboarding(sanitizeDraft(draft), await serverToday());
+  const { userId } = await requireUser();
+  await completeOnboardingFor(userId, sanitizeDraft(draft), await serverToday());
   redirect("/");
 }

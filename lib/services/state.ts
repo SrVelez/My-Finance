@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { weekPool, weekRange, weekSpent, weekTxsOf, type EngineBill, type EngineGoal, type EngineState, type ISODate } from "@/lib/engine";
 import type { Cents } from "@/lib/money";
 import { todayISO } from "@/lib/today";
-import { getOrCreateUser } from "./user";
+import { active } from "./scope";
+import { getUser } from "./user";
 
 export const toBillState = (b: Bill): EngineBill => ({
   id: b.id,
@@ -40,12 +41,12 @@ export const toGoalState =(g: Goal): EngineGoal => ({
   isEmergency: g.isEmergency,
 });
 
-/** Lê usuário, contas e metas e monta o estado do motor. */
-export async function loadState() {
-  const user = await getOrCreateUser();
+/** Lê usuário, contas e metas (só as ativas) e monta o estado do motor. */
+export async function loadState(userId: string) {
+  const user = await getUser(userId);
   const [bills, goals] = await Promise.all([
-    db.bill.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } }),
-    db.goal.findMany({ where: { userId: user.id }, orderBy: { priority: "asc" } }),
+    db.bill.findMany({ where: { userId, ...active }, orderBy: { id: "asc" } }),
+    db.goal.findMany({ where: { userId, ...active }, orderBy: { priority: "asc" } }),
   ]);
   const state: EngineState = {
     weeklyLivingCents: user.weeklyLivingCents,

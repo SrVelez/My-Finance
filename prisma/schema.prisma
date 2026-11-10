@@ -9,16 +9,120 @@ datasource db {
 
 // Valores monetários sempre em centavos inteiros. `fundId` é reservado para os Fundos (V2).
 
+// Cada pessoa tem o seu usuário: contas, metas, transações e configurações pertencem a um userId
+// e somem junto com ele (onDelete: Cascade). As tabelas Session, Account, Verification, Passkey e
+// RateLimit são do Better Auth (nomes e campos conforme a documentação da versão instalada).
 model User {
   id                 String        @id @default(cuid())
   name               String
-  weeklyLivingCents  Int
+  // Usuário legado (dados de antes do login) usa legado@financa.local até o claim-legacy.
+  // As contas reais sempre informam o e-mail (Better Auth). O padrão gerado só existe para código que
+  // cria usuários direto no banco (seeds, testes) sem se importar com e-mail.
+  email              String        @unique @default(cuid())
+  emailVerified      Boolean       @default(false)
+  image              String?
+  weeklyLivingCents  Int           @default(0)
   weekStartDay       Int           @default(1) // 0 = domingo … 6 = sábado
   onboarded          Boolean       @default(false)
   bills              Bill[]
   goals              Goal[]
   transactions       Transaction[]
+  sessions           Session[]
+  accounts           Account[]
+  passkeys           Passkey[]
+  claims             OnboardingClaim[]
   createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @default(now()) @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([identifier])
+}
+
+model Passkey {
+  id           String    @id @default(cuid())
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime? @default(now())
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+}
+
+// Limite de tentativas do Better Auth (por IP e caminho), guardado no banco.
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+// Envios de código por e-mail: limite por e-mail (o Better Auth só limita por IP).
+model OtpSend {
+  id        String   @id @default(cuid())
+  email     String
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+// Rascunho do onboarding já gravado na conta: o mesmo draftId nunca grava duas vezes.
+model OnboardingClaim {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draftId   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, draftId])
 }
 
 model Bill {
@@ -41,6 +145,8 @@ model Bill {
   // Último vencimento que o usuário confirmou (pago ou em atraso).
   confirmedThrough String?
   createdAt    DateTime      @default(now())
+  // "Substituir pelo novo plano": conta antiga arquivada some das telas e do motor; o histórico fica.
+  archivedAt   DateTime?
   transactions Transaction[]
 
   @@index([userId])
@@ -60,6 +166,8 @@ model Goal {
   isEmergency  Boolean       @default(false)
   // Base do marcador de "ritmo esperado" no Resumo.
   createdAt    DateTime      @default(now())
+  // "Substituir pelo novo plano": meta antiga arquivada some das telas e do motor; o histórico fica.
+  archivedAt   DateTime?
   transactions Transaction[]
 
   @@index([userId])
@@ -97,4 +205,7 @@ model Transaction {
   createdAt   DateTime @default(now())
 
   @@index([userId, date])
+  @@index([userId, goalId])
+  @@index([userId, billId])
+  @@index([userId, type])
 }

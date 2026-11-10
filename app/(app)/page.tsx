@@ -10,7 +10,8 @@ import { StatementList } from "@/components/StatementList";
 import { getHomeData } from "@/lib/services/home";
 import { getStatement } from "@/lib/services/statement";
 import { serverToday } from "@/lib/services/today";
-import { getOrCreateUser } from "@/lib/services/user";
+import { requireUser } from "@/lib/auth/session";
+import { getUser } from "@/lib/services/user";
 
 export default function Home() {
   return (
@@ -21,12 +22,13 @@ export default function Home() {
 }
 
 async function HomeContent() {
-  const user = await getOrCreateUser();
+  const { userId } = await requireUser();
+  const user = await getUser(userId);
   // Quem ainda não fez o onboarding é levado a ele.
   if (!user.onboarded) redirect("/onboarding");
 
   const today = await serverToday();
-  const [home, statement] = await Promise.all([getHomeData(today), getStatement(5)]);
+  const [home, statement] = await Promise.all([getHomeData(userId, today), getStatement(userId, 5)]);
   const hasIncome = home.poolCents > 0 || home.spentCents > 0;
 
   return (

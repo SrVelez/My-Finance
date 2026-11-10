@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  createBill,
+  createBillFor,
   deleteBill,
   confirmBillPayment,
   updateBill,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/bills";
 import type { BillOpeningInput } from "@/lib/engine";
 import { fail, type ActionResult } from "@/lib/result";
+import { requireUser } from "@/lib/auth/session";
 import { serverToday } from "@/lib/services/today";
 import { assertCents, assertDueDay, assertName } from "@/lib/validate";
 
@@ -36,19 +37,22 @@ const refresh = () => {
 };
 
 export async function createBillAction(input: BillInput, opening?: BillOpeningInput) {
-  await createBill(parse(input), parseOpening(opening), await serverToday());
+  const { userId } = await requireUser();
+  await createBillFor(userId, parse(input), parseOpening(opening), await serverToday());
   refresh();
   redirect("/contas");
 }
 
 export async function updateBillAction(id: string, input: BillInput) {
-  await updateBill(id, parse(input));
+  const { userId } = await requireUser();
+  await updateBill(userId, id, parse(input));
   refresh();
   redirect(`/contas/${id}`);
 }
 
 export async function deleteBillAction(id: string) {
-  await deleteBill(id);
+  const { userId } = await requireUser();
+  await deleteBill(userId, id);
   refresh();
   redirect("/contas");
 }
@@ -58,8 +62,9 @@ export async function deleteBillAction(id: string) {
  * Falhas de regra voltam como valor (o Next esconde mensagens de erros lançados em produção).
  */
 export async function confirmPaymentAction(id: string, paidCents: number | null): Promise<ActionResult> {
+  const { userId } = await requireUser();
   try {
-    const result = await confirmBillPayment(id, paidCents, await serverToday());
+    const result = await confirmBillPayment(userId, id, paidCents, await serverToday());
     if (result.ok) refresh();
     return result;
   } catch {

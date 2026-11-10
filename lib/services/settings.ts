@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import type { Cents } from "@/lib/money";
-import { getOrCreateUser } from "./user";
 
 export interface SettingsInput {
   name: string;
@@ -9,20 +8,18 @@ export interface SettingsInput {
   weekStartDay: number;
 }
 
-export async function updateSettings(input: SettingsInput) {
-  const user = await getOrCreateUser();
-  await db.user.update({ where: { id: user.id }, data: input });
+export async function updateSettings(userId: string, input: SettingsInput) {
+  await db.user.update({ where: { id: userId }, data: input });
 }
 
 /** Apaga contas, metas e transações e volta ao onboarding. */
-export async function resetAllData() {
-  const user = await getOrCreateUser();
+export async function resetAllData(userId: string) {
   await db.$transaction([
-    db.transaction.deleteMany({ where: { userId: user.id } }),
-    db.bill.deleteMany({ where: { userId: user.id } }),
-    db.goal.deleteMany({ where: { userId: user.id } }),
+    db.transaction.deleteMany({ where: { userId } }),
+    db.bill.deleteMany({ where: { userId } }),
+    db.goal.deleteMany({ where: { userId } }),
     db.user.update({
-      where: { id: user.id },
+      where: { id: userId },
       data: { name: "", weeklyLivingCents: 0, weekStartDay: 1, onboarded: false },
     }),
   ]);

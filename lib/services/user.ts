@@ -1,10 +1,9 @@
-import { connection } from "next/server";
 import { db } from "@/lib/db";
+import { NotFoundError } from "@/lib/auth/errors";
 
-/** MVP sem autenticação: um único usuário local (criado sob demanda). */
-export async function getOrCreateUser() {
-  await connection();
-  const existing = await db.user.findFirst({ orderBy: { createdAt: "asc" } });
-  if (existing) return existing;
-  return db.user.create({ data: { name: "", weeklyLivingCents: 0 } });
+/** Dados e configurações do usuário (nome, gasto semanal, início da semana, onboarding feito). */
+export async function getUser(userId: string) {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError("Usuário não encontrado.");
+  return user;
 }

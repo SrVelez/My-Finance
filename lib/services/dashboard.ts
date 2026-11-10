@@ -4,7 +4,8 @@ import { intervaloAnterior, intervaloDo } from "@/lib/dashboard/periodo";
 import type { DashBill, DashGoal, DashTx, Dashboard, Periodo } from "@/lib/dashboard/types";
 import { nextDue, openDueAmount, settleBill, weeklyReceiptsUntil, type ISODate } from "@/lib/engine";
 import { fromDbDate, toBillState, toDbDate } from "./state";
-import { getOrCreateUser } from "./user";
+import { active } from "./scope";
+import { getUser } from "./user";
 
 interface DashboardUser {
   id: string;
@@ -13,8 +14,8 @@ interface DashboardUser {
 }
 
 /** Resumo do usuário da sessão. */
-export async function getDashboard(periodo: Periodo, today: ISODate): Promise<Dashboard> {
-  return getDashboardFor(await getOrCreateUser(), periodo, today);
+export async function getDashboard(userId: string, periodo: Periodo, today: ISODate): Promise<Dashboard> {
+  return getDashboardFor(await getUser(userId), periodo, today);
 }
 
 /** Lê só os dados de `user` (toda consulta filtra por `userId`) e agrega. */
@@ -28,8 +29,8 @@ export async function getDashboardFor(user: DashboardUser, periodo: Periodo, tod
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     }),
     db.transaction.count({ where: { userId: user.id, type: "income" } }),
-    db.goal.findMany({ where: { userId: user.id } }),
-    db.bill.findMany({ where: { userId: user.id } }),
+    db.goal.findMany({ where: { userId: user.id, ...active } }),
+    db.bill.findMany({ where: { userId: user.id, ...active } }),
     // Saldo inicial e ajustes ativos de metas: de onde o ritmo esperado parte.
     db.transaction.findMany({
       where: { userId: user.id, goalId: { not: null }, type: { in: ["opening_balance", "adjustment"] }, undoneAt: null },

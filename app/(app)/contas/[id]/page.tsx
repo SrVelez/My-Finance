@@ -10,6 +10,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { dueSoonLabel } from "@/lib/dueLabel";
 import { formatDateChip, weekdayShort } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
+import { requireUser } from "@/lib/auth/session";
 import { getFreeLeft } from "@/lib/services/balance";
 import { getBill } from "@/lib/services/bills";
 import { getBillDetail } from "@/lib/services/history";
@@ -27,10 +28,11 @@ export default function ContaPage({ params }: PageProps<"/contas/[id]">) {
 async function Conta({ params }: { params: PageProps<"/contas/[id]">["params"] }) {
   const { id } = await params;
   const today = await serverToday();
-  const detail = await getBillDetail(id, today);
+  const { userId } = await requireUser();
+  const detail = await getBillDetail(userId, id, today);
   if (!detail) notFound();
   const { bill, history } = detail;
-  const [row, freeLeftCents] = await Promise.all([getBill(id), getFreeLeft(today)]);
+  const [row, freeLeftCents] = await Promise.all([getBill(userId, id), getFreeLeft(userId, today)]);
   if (!row) notFound();
   const overdue = bill.open?.kind === "overdue";
   const soon = dueSoonLabel(bill.daysLeft);

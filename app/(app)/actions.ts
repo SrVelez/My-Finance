@@ -7,6 +7,7 @@ import { moveBillMoney } from "@/lib/services/bills";
 import { moveGoalMoney } from "@/lib/services/goals";
 import { fail, type ActionResult } from "@/lib/result";
 import { serverToday } from "@/lib/services/today";
+import { requireUser } from "@/lib/auth/session";
 import { assertCents, RESET_WORD } from "@/lib/validate";
 
 /** Guardar (do livre) ou retirar (para o livre) dinheiro de uma conta ou meta, à mão. */
@@ -19,9 +20,10 @@ export async function moveMoneyAction(
   if ((kind !== "bill" && kind !== "goal") || (direction !== "in" && direction !== "out") || typeof id !== "string") {
     return fail("Pedido inválido.");
   }
+  const { userId } = await requireUser();
   try {
     const today = await serverToday();
-    const result = kind === "bill" ? await moveBillMoney(id, direction, cents, today) : await moveGoalMoney(id, direction, cents, today);
+    const result = kind === "bill" ? await moveBillMoney(userId, id, direction, cents, today) : await moveGoalMoney(userId, id, direction, cents, today);
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {
@@ -42,8 +44,9 @@ export async function adjustBalanceAction(
   if ((kind !== "bill" && kind !== "goal") || typeof id !== "string" || !isAdjustReason(reason)) {
     return { ok: false, error: "Pedido inválido." };
   }
+  const { userId } = await requireUser();
   try {
-    const result = await adjustBalance(kind, id, { newBalanceCents: assertCents(newBalanceCents), reason }, await serverToday());
+    const result = await adjustBalance(userId, kind, id, { newBalanceCents: assertCents(newBalanceCents), reason }, await serverToday());
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {
@@ -54,8 +57,9 @@ export async function adjustBalanceAction(
 /** Desfaz um ajuste de saldo: restaura o saldo e o livre; o registro fica no histórico. */
 export async function undoAdjustmentAction(adjustmentId: string): Promise<ActionResult> {
   if (typeof adjustmentId !== "string") return fail("Pedido inválido.");
+  const { userId } = await requireUser();
   try {
-    const result = await undoAdjustment(adjustmentId, await serverToday());
+    const result = await undoAdjustment(userId, adjustmentId, await serverToday());
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {
@@ -69,8 +73,9 @@ export async function undoAdjustmentAction(adjustmentId: string): Promise<Action
  */
 export async function resetAllBalancesAction(confirmation: string): Promise<ResetResult> {
   if (confirmation !== RESET_WORD) return { ok: false, error: `Digite ${RESET_WORD} para confirmar.` };
+  const { userId } = await requireUser();
   try {
-    const result = await resetAllBalances(await serverToday());
+    const result = await resetAllBalances(userId, await serverToday());
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {
@@ -81,8 +86,9 @@ export async function resetAllBalancesAction(confirmation: string): Promise<Rese
 /** Desfaz de uma vez o último "Recomeçar saldos" (todos os ajustes do mesmo grupo). */
 export async function undoBatchAction(groupId: string): Promise<ActionResult> {
   if (typeof groupId !== "string") return fail("Pedido inválido.");
+  const { userId } = await requireUser();
   try {
-    const result = await undoBatch(groupId, await serverToday());
+    const result = await undoBatch(userId, groupId, await serverToday());
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {

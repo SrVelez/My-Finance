@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Valores monetários sempre em centavos inteiros. `fundId` é reservado para os Fundos (V2).
+
+model User {
+  id                 String        @id @default(cuid())
+  name               String
+  weeklyLivingCents  Int
+  weekStartDay       Int           @default(1) // 0 = domingo … 6 = sábado
+  onboarded          Boolean       @default(false)
+  bills              Bill[]
+  goals              Goal[]
+  transactions       Transaction[]
+  createdAt          DateTime      @default(now())
+}
+
+model Bill {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundId       String?
+  name         String
+  amountCents  Int
+  dueDay       Int
+  savedCents   Int           @default(0)
+  // Último vencimento (yyyy-mm-dd) já dado como pago/consumido; null = nenhum.
+  paidThrough  String?
+  // Saldo consumido ao considerar o vencimento pago (permite "Não foi pago").
+  consumedCents Int         @default(0)
+  // Vencimento marcado como "Não foi pago".
+  unpaidDue    String?
+  // Quanto ainda falta pagar do vencimento em atraso (0 = valor cheio da conta).
+  unpaidCents  Int           @default(0)
+  // Último vencimento que o usuário confirmou (pago ou em atraso).
+  confirmedThrough String?
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Goal {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fundId       String?
+  name         String
+  targetCents  Int
+  savedCents   Int           @default(0)
+  deadline     String? // yyyy-mm
+  weeklyCents  Int           @default(0)
+  priority     Int
+  isEmergency  Boolean       @default(false)
+  // Base do marcador de "ritmo esperado" no Resumo.
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+
+  @@index([userId])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // income | expense | allocation | withdrawal | bill_payment
+  // | opening_balance (saldo que já existia fora do app) | adjustment (correção manual de saldo)
+  type        String
+  // Em `adjustment` é com sinal: negativo reduz o saldo da conta/meta.
+  amountCents Int
+  category    String?
+  date        DateTime
+  note        String?
+  // Só em `adjustment`: match_bank | from_free | reset | used | return_to_free.
+  // Em `opening_balance`: `paid_before` marca "vencimento já pago antes do Finança".
+  reason      String?
+  // Só em `adjustment`: a diferença entra ou sai do livre da semana.
+  affectsWeeklyFree Boolean @default(false)
+  // Só em `adjustment`: desfeito (o registro fica no histórico).
+  undoneAt    DateTime?
+  // Em `opening_balance` e `adjustment`: saldo da conta/meta logo depois do registro.
+  balanceAfterCents Int?
+  // Só em `income`: quanto faltou para o dia a dia naquele recebimento (null = antes deste campo).
+  shortfallCents Int?
+  // Liga o recebimento às alocações/retiradas geradas por ele (extrato).
+  groupId     String?
+  billId      String?
+  bill        Bill?    @relation(fields: [billId], references: [id], onDelete: SetNull)
+  goalId      String?
+  goal        Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, date])
+}

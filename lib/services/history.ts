@@ -12,7 +12,6 @@ import {
 import { listBills, type BillView } from "./bills";
 import { listGoals, type GoalView } from "./goals";
 import { fromDbDate } from "./state";
-import { getOrCreateUser } from "./user";
 
 /** Valor recebido em cada recebimento, para dizer "do recebimento de €X". */
 async function incomesByGroup(userId: string, rows: { groupId: string | null }[]) {
@@ -58,13 +57,12 @@ export interface BillDetail {
 }
 
 /** Conta + extrato: guardado, retiradas, pagamentos confirmados e o vencimento em aberto. */
-export async function getBillDetail(id: string, today: ISODate): Promise<BillDetail | null> {
-  const user = await getOrCreateUser();
-  const bill = (await listBills(today)).upcoming.find((b) => b.id === id);
+export async function getBillDetail(userId: string, id: string, today: ISODate): Promise<BillDetail | null> {
+  const bill = (await listBills(userId, today)).upcoming.find((b) => b.id === id);
   if (!bill) return null;
 
-  const txs = await db.transaction.findMany({ where: { userId: user.id, billId: id } });
-  const items: HistoryItem[] = billHistory(toRows(txs), await incomesByGroup(user.id, txs));
+  const txs = await db.transaction.findMany({ where: { userId, billId: id } });
+  const items: HistoryItem[] = billHistory(toRows(txs), await incomesByGroup(userId, txs));
 
   // Vencimento ainda sem resposta final: aparece no topo como informação (sem sinal).
   if (bill.open) {
@@ -92,10 +90,9 @@ export interface GoalDetail {
 }
 
 /** Meta + extrato: guardado a cada recebimento e retiradas. */
-export async function getGoalDetail(id: string, today: ISODate): Promise<GoalDetail | null> {
-  const user = await getOrCreateUser();
-  const goal = (await listGoals(today)).goals.find((g) => g.id === id);
+export async function getGoalDetail(userId: string, id: string, today: ISODate): Promise<GoalDetail | null> {
+  const goal = (await listGoals(userId, today)).goals.find((g) => g.id === id);
   if (!goal) return null;
-  const txs = await db.transaction.findMany({ where: { userId: user.id, goalId: id } });
-  return { goal, history: groupByDate(goalHistory(toRows(txs), await incomesByGroup(user.id, txs))) };
+  const txs = await db.transaction.findMany({ where: { userId, goalId: id } });
+  return { goal, history: groupByDate(goalHistory(toRows(txs), await incomesByGroup(userId, txs))) };
 }

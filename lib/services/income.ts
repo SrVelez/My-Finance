@@ -21,8 +21,8 @@ export interface IncomeSimulation {
 }
 
 /** Simulação: calcula a distribuição sem alterar nenhum saldo. */
-export async function simulateIncome(incomeCents: Cents, date: ISODate): Promise<IncomeSimulation> {
-  const { state } = await loadState();
+export async function simulateIncome(userId: string, incomeCents: Cents, date: ISODate): Promise<IncomeSimulation> {
+  const { state } = await loadState(userId);
   const distribution = distribute({ incomeCents, date, state });
   const reserve =
     distribution.shortfallCents > 0 ? coverShortfallFromReserve(distribution, state.goals) : null;
@@ -39,8 +39,8 @@ export interface ConfirmIncomeInput {
 }
 
 /** Confirma o recebimento: grava a receita, as alocações e os novos saldos. */
-export async function confirmIncome({ incomeCents, date, overrides, useReserve }: ConfirmIncomeInput) {
-  const { user, state, bills } = await loadState();
+export async function confirmIncome(userId: string, { incomeCents, date, overrides, useReserve }: ConfirmIncomeInput) {
+  const { user, state, bills } = await loadState(userId);
   // A distribuição é sempre recalculada aqui: o cliente nunca dita os números.
   const dist = distribute({ incomeCents, date, state });
 
@@ -73,7 +73,7 @@ export async function confirmIncome({ incomeCents, date, overrides, useReserve }
       const next = settled.unpaidDue
         ? { ...settled, consumedCents: settled.consumedCents + add }
         : { ...settled, savedCents: settled.savedCents + add };
-      await tx.bill.update({ where: { id: row.id }, data: billCycleData(next) });
+      await tx.bill.updateMany({ where: { id: row.id, userId: user.id }, data: billCycleData(next) });
       if (add > 0) {
         await tx.transaction.create({
           data: { userId: user.id, type: "allocation", amountCents: add, date: when, billId: row.id, groupId, note: row.name, category: "conta" },
@@ -84,7 +84,7 @@ export async function confirmIncome({ incomeCents, date, overrides, useReserve }
     for (const goal of state.goals) {
       const add = amounts.get(goal.id) ?? 0;
       if (add > 0) {
-        await tx.goal.update({ where: { id: goal.id }, data: { savedCents: { increment: add } } });
+        await tx.goal.updateMany({ where: { id: goal.id, userId: user.id }, data: { savedCents: { increment: add } } });
         await tx.transaction.create({
           data: { userId: user.id, type: "allocation", amountCents: add, date: when, goalId: goal.id, groupId, note: goal.name, category: "meta" },
         });
@@ -92,8 +92,8 @@ export async function confirmIncome({ incomeCents, date, overrides, useReserve }
     }
 
     if (cover && cover.goalId && cover.withdrawalCents > 0) {
-      await tx.goal.update({
-        where: { id: cover.goalId },
+      await tx.goal.updateMany({
+        where: { id: cover.goalId, userId: user.id },
         data: { savedCents: { decrement: cover.withdrawalCents } },
       });
       await tx.transaction.create({

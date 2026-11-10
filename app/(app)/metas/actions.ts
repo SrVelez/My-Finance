@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  createGoal,
+  createGoalFor,
   deleteGoal,
   reorderGoals,
   resolveGoalDeadline,
@@ -12,6 +12,7 @@ import {
   type GoalInput,
 } from "@/lib/services/goals";
 import { fail, type ActionResult } from "@/lib/result";
+import { requireUser } from "@/lib/auth/session";
 import { serverToday } from "@/lib/services/today";
 import { assertCents, assertDeadline, assertName } from "@/lib/validate";
 
@@ -31,33 +32,38 @@ const refresh = () => {
 };
 
 export async function createGoalAction(input: GoalInput, openingCents = 0) {
-  await createGoal(parse(input), assertCents(openingCents), await serverToday());
+  const { userId } = await requireUser();
+  await createGoalFor(userId, parse(input), assertCents(openingCents), await serverToday());
   refresh();
   redirect("/metas");
 }
 
 export async function updateGoalAction(id: string, input: GoalInput) {
-  await updateGoal(id, parse(input));
+  const { userId } = await requireUser();
+  await updateGoal(userId, id, parse(input));
   refresh();
   redirect(`/metas/${id}`);
 }
 
 export async function deleteGoalAction(id: string) {
-  await deleteGoal(id);
+  const { userId } = await requireUser();
+  await deleteGoal(userId, id);
   refresh();
   redirect("/metas");
 }
 
 export async function reorderGoalsAction(ids: string[]) {
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) throw new Error("Ordem inválida");
-  await reorderGoals(ids);
+  const { userId } = await requireUser();
+  await reorderGoals(userId, ids);
   refresh();
 }
 
 /** Meta com prazo vencido: estender, ajustar o alvo, seguir sem prazo ou concluir. */
 export async function resolveGoalDeadlineAction(id: string, choice: DeadlineChoice): Promise<ActionResult> {
+  const { userId } = await requireUser();
   try {
-    const result = await resolveGoalDeadline(id, choice, await serverToday());
+    const result = await resolveGoalDeadline(userId, id, choice, await serverToday());
     if (result.ok) refresh();
     return result;
   } catch {

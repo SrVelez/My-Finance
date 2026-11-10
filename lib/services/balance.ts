@@ -13,7 +13,8 @@ import {
 import type { Cents } from "@/lib/money";
 import { fail, type ActionResult } from "@/lib/result";
 import { billCycleData, toBillState, toDbDate, weekStats } from "./state";
-import { getOrCreateUser } from "./user";
+import { active } from "./scope";
+import { getUser } from "./user";
 
 export type BalanceKind = "bill" | "goal";
 
@@ -33,6 +34,7 @@ const NOT_FOUND: Record<BalanceKind, string> = { bill: "Conta não encontrada.",
 /** Uma conta ou meta com o saldo que a tela mostra. */
 interface Holding {
   kind: BalanceKind;
+  userId: string;
   id: string;
   name: string;
   haveCents: Cents;
@@ -45,25 +47,25 @@ interface Holding {
 
 async function loadHolding(tx: Tx, userId: string, kind: BalanceKind, id: string, today: ISODate): Promise<Holding | null> {
   if (kind === "goal") {
-    const goal = await tx.goal.findFirst({ where: { id, userId } });
-    return goal && { kind, id, name: goal.name, haveCents: goal.savedCents, targetCents: goal.targetCents };
+    const goal = await tx.goal.findFirst({ where: { id, userId, ...active } });
+    return goal && { kind, userId, id, name: goal.name, haveCents: goal.savedCents, targetCents: goal.targetCents };
   }
-  const row = await tx.bill.findFirst({ where: { id, userId } });
+  const row = await tx.bill.findFirst({ where: { id, userId, ...active } });
   if (!row) return null;
   const settled = settleBill(toBillState(row), today);
   const h = billHolding(settled);
-  return { kind, id, name: row.name, haveCents: h.haveCents, targetCents: h.targetCents, settled, overdue: h.overdue };
+  return { kind, userId, id, name: row.name, haveCents: h.haveCents, targetCents: h.targetCents, settled, overdue: h.overdue };
 }
 
 /** Grava o novo saldo (nunca por fora de uma transação de ajuste). */
 async function writeBalance(tx: Tx, h: Holding, newCents: Cents) {
   if (h.kind === "goal") {
-    await tx.goal.update({ where: { id: h.id }, data: { savedCents: newCents } });
+    await tx.goal.updateMany({ where: { id: h.id, userId: h.userId }, data: { savedCents: newCents } });
     return;
   }
   const settled = h.settled as EngineBill;
   const next = h.overdue ? { ...settled, consumedCents: newCents } : { ...settled, savedCents: newCents };
-  await tx.bill.update({ where: { id: h.id }, data: billCycleData(next) });
+  await tx.bill.updateMany({ where: { id: h.id, userId: h.userId }, data: billCycleData(next) });
 }
 
 const itemRef = (h: Pick<Holding, "kind" | "id">) => (h.kind === "bill" ? { billId: h.id } : { goalId: h.id });
@@ -136,7 +138,7 @@ async function undoInTx(tx: Tx, userId: string, adjustmentId: string, today: ISO
   if (restored < 0) throw new UndoError("O saldo atual não permite desfazer este ajuste.");
 
   await writeBalance(tx, h, restored);
-  await tx.transaction.update({ where: { id: adj.id }, data: { undoneAt: new Date() } });
+  await tx.transaction.updateMany({ where: { id: adj.id, userId }, data: { undoneAt: new Date() } });
 }
 
 /** Desfaz um ajuste: restaura o saldo e o livre; o registro fica no histórico. */
@@ -175,8 +177,8 @@ export async function undoBatchFor(user: BalanceUser, groupId: string, today: IS
 export async function resetAllBalancesFor(user: BalanceUser, today: ISODate): Promise<ResetResult> {
   return db.$transaction(async (tx): Promise<ResetResult> => {
     const groupId = randomUUID();
-    const bills = await tx.bill.findMany({ where: { userId: user.id }, orderBy: { id: "asc" }, select: { id: true } });
-    const goals = await tx.goal.findMany({ where: { userId: user.id }, orderBy: { priority: "asc" }, select: { id: true } });
+    const bills = await tx.bill.findMany({ where: { userId: user.id, ...active }, orderBy: { id: "asc" }, select: { id: true } });
+    const goals = await tx.goal.findMany({ where: { userId: user.id, ...active }, orderBy: { priority: "asc" }, select: { id: true } });
     const holdings: Holding[] = [];
     for (const [kind, rows] of [["bill", bills], ["goal", goals]] as const) {
       for (const r of rows) {
@@ -206,24 +208,27 @@ export async function resetAllBalancesFor(user: BalanceUser, today: ISODate): Pr
   });
 }
 
-// Versões para a sessão atual (usuário único local).
-const current = async (): Promise<BalanceUser> => getOrCreateUser();
+// Versões que recebem só o `userId` da sessão (a configuração da semana vem do banco).
+const ref = async (userId: string): Promise<BalanceUser> => {
+  const { id, weekStartDay } = await getUser(userId);
+  return { id, weekStartDay };
+};
 
-export async function adjustBalance(kind: BalanceKind, id: string, input: { newBalanceCents: Cents; reason: AdjustReason }, today: ISODate) {
-  return adjustBalanceFor(await current(), kind, id, input, today);
+export async function adjustBalance(userId: string, kind: BalanceKind, id: string, input: { newBalanceCents: Cents; reason: AdjustReason }, today: ISODate) {
+  return adjustBalanceFor(await ref(userId), kind, id, input, today);
 }
-export async function undoAdjustment(adjustmentId: string, today: ISODate) {
-  return undoAdjustmentFor(await current(), adjustmentId, today);
+export async function undoAdjustment(userId: string, adjustmentId: string, today: ISODate) {
+  return undoAdjustmentFor(await ref(userId), adjustmentId, today);
 }
-export async function undoBatch(groupId: string, today: ISODate) {
-  return undoBatchFor(await current(), groupId, today);
+export async function undoBatch(userId: string, groupId: string, today: ISODate) {
+  return undoBatchFor(await ref(userId), groupId, today);
 }
-export async function resetAllBalances(today: ISODate) {
-  return resetAllBalancesFor(await current(), today);
+export async function resetAllBalances(userId: string, today: ISODate) {
+  return resetAllBalancesFor(await ref(userId), today);
 }
 
 /** Quanto ainda há de livre na semana (para a folha "Ajustar saldo" bloquear "tirar do livre"). */
-export async function getFreeLeft(today: ISODate): Promise<Cents> {
-  const user = await getOrCreateUser();
+export async function getFreeLeft(userId: string, today: ISODate): Promise<Cents> {
+  const user = await getUser(userId);
   return (await weekStats(user.id, today, user.weekStartDay)).freeLeftCents;
 }

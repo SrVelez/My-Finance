@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { requireUser } from "@/lib/auth/session";
 import { getGoal } from "@/lib/services/goals";
 import { serverToday } from "@/lib/services/today";
 import { GoalForm } from "../../GoalForm";
@@ -14,7 +15,8 @@ export default function EditarMetaPage({ params }: { params: Promise<{ id: strin
 
 async function Editar({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const goal = await getGoal(id);
+  const { userId } = await requireUser();
+  const goal = await getGoal(userId, id);
   if (!goal) notFound();
   return (
     <GoalForm

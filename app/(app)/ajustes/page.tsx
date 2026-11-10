@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { getOrCreateUser } from "@/lib/services/user";
+import { requireUser } from "@/lib/auth/session";
+import { getUser } from "@/lib/services/user";
 import { SettingsForm } from "./SettingsForm";
 
 export default function AjustesPage() {
@@ -11,7 +12,8 @@ export default function AjustesPage() {
 }
 
 async function Ajustes() {
-  const user = await getOrCreateUser();
+  const { userId } = await requireUser();
+  const user = await getUser(userId);
   return (
     <SettingsForm
       initial={{ name: user.name, weeklyLivingCents: user.weeklyLivingCents, weekStartDay: user.weekStartDay }}

@@ -4,7 +4,6 @@ import type { ISODate } from "@/lib/engine";
 import { todayISO } from "@/lib/today";
 import { createBillIn } from "./bills";
 import { createGoalIn } from "./goals";
-import { getOrCreateUser } from "./user";
 
 /**
  * Grava o resultado do onboarding; substitui contas, metas e transações do usuário.
@@ -32,9 +31,4 @@ export async function completeOnboardingFor(userId: string, draft: OnboardingDra
       );
     }
   });
-}
-
-export async function completeOnboarding(draft: OnboardingDraft, today: ISODate = todayISO()) {
-  const user = await getOrCreateUser();
-  await completeOnboardingFor(user.id, draft, today);
 }

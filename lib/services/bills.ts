@@ -18,7 +18,9 @@ import { formatEUR, type Cents } from "@/lib/money";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { todayISO } from "@/lib/today";
 import { billCycleData, createdAtOf, toBillState, toDbDate, weekStats } from "./state";
-import { getOrCreateUser } from "./user";
+import { NotFoundError } from "@/lib/auth/errors";
+import { active } from "./scope";
+import { getUser } from "./user";
 
 /** Vencimento que espera uma resposta do usuário. */
 export interface OpenDue {
@@ -57,9 +59,8 @@ export interface BillsOverview {
   paid: { id: string; name: string; amountCents: Cents; confirmedThrough: ISODate }[];
 }
 
-export async function listBills(today: ISODate): Promise<BillsOverview> {
-  const user = await getOrCreateUser();
-  const rows = await db.bill.findMany({ where: { userId: user.id }, orderBy: { id: "asc" } });
+export async function listBills(userId: string, today: ISODate): Promise<BillsOverview> {
+  const rows = await db.bill.findMany({ where: { userId, ...active }, orderBy: { id: "asc" } });
 
   const upcoming: BillView[] = [];
   const paid: BillsOverview["paid"] = [];
@@ -94,9 +95,9 @@ export async function listBills(today: ISODate): Promise<BillsOverview> {
   return { totalCents: rows.reduce((s, b) => s + b.amountCents, 0), upcoming, paid };
 }
 
-export async function getBill(id: string) {
-  const user = await getOrCreateUser();
-  return db.bill.findFirst({ where: { id, userId: user.id } });
+/** A conta do usuário, ou `null` se não existe ou é de outra pessoa (a tela responde 404). */
+export async function getBill(userId: string, id: string) {
+  return db.bill.findFirst({ where: { id, userId, ...active } });
 }
 
 export interface BillInput {
@@ -155,30 +156,22 @@ export async function createBillFor(
   await db.$transaction((tx) => createBillIn(tx, userId, input, opening, today));
 }
 
-export async function createBill(input: BillInput, opening: BillOpeningInput = { mode: "none" }, today: ISODate = todayISO()) {
-  const user = await getOrCreateUser();
-  await createBillFor(user.id, input, opening, today);
+export async function updateBill(userId: string, id: string, input: BillInput) {
+  const { count } = await db.bill.updateMany({ where: { id, userId, ...active }, data: input });
+  if (count === 0) throw new NotFoundError("Conta não encontrada.");
 }
 
-export async function updateBill(id: string, input: BillInput) {
-  const bill = await getBill(id);
-  if (!bill) throw new Error("Conta não encontrada");
-  await db.bill.update({ where: { id }, data: input });
-}
-
-export async function deleteBill(id: string) {
-  const bill = await getBill(id);
-  if (!bill) throw new Error("Conta não encontrada");
-  await db.bill.delete({ where: { id } });
+export async function deleteBill(userId: string, id: string) {
+  const { count } = await db.bill.deleteMany({ where: { id, userId, ...active } });
+  if (count === 0) throw new NotFoundError("Conta não encontrada.");
 }
 
 /**
  * "Você pagou?": `paidCents` omitido = paguei tudo; `0` = ainda não paguei; outro
  * valor = pagamento parcial. O que não estava guardado sai do livre da semana.
  */
-export async function confirmBillPayment(id: string, paidCents: Cents | null, today: ISODate): Promise<ActionResult> {
-  const user = await getOrCreateUser();
-  const row = await db.bill.findFirst({ where: { id, userId: user.id } });
+export async function confirmBillPayment(userId: string, id: string, paidCents: Cents | null, today: ISODate): Promise<ActionResult> {
+  const row = await db.bill.findFirst({ where: { id, userId, ...active } });
   if (!row) return fail("Conta não encontrada.");
 
   const settled = settleBill(toBillState(row), today);
@@ -190,11 +183,11 @@ export async function confirmBillPayment(id: string, paidCents: Cents | null, to
   if (!payment) return fail("Não há vencimento para confirmar.");
 
   await db.$transaction(async (tx) => {
-    await tx.bill.update({ where: { id }, data: billCycleData(payment.bill) });
+    await tx.bill.updateMany({ where: { id, userId }, data: billCycleData(payment.bill) });
     if (payment.paidCents > 0) {
       await tx.transaction.create({
         data: {
-          userId: user.id,
+          userId,
           type: "bill_payment",
           amountCents: payment.paidCents,
           date: toDbDate(payment.dueDate),
@@ -208,7 +201,7 @@ export async function confirmBillPayment(id: string, paidCents: Cents | null, to
       // A parte que não estava guardada saiu do dinheiro livre: aparece no extrato e reduz o livre.
       await tx.transaction.create({
         data: {
-          userId: user.id,
+          userId,
           type: "expense",
           amountCents: payment.fromFreeCents,
           date: toDbDate(today),
@@ -224,14 +217,14 @@ export async function confirmBillPayment(id: string, paidCents: Cents | null, to
 
 /** Guardar (do livre da semana) ou retirar (de volta ao livre) um valor da conta. */
 export async function moveBillMoney(
+  userId: string,
   id: string,
   direction: "in" | "out",
   cents: Cents,
   today: ISODate,
 ): Promise<ActionResult> {
   if (!Number.isInteger(cents) || cents <= 0) return fail("Informe um valor maior que zero.");
-  const user = await getOrCreateUser();
-  const row = await db.bill.findFirst({ where: { id, userId: user.id } });
+  const row = await db.bill.findFirst({ where: { id, userId, ...active } });
   if (!row) return fail("Conta não encontrada.");
 
   const settled = settleBill(toBillState(row), today);
@@ -243,7 +236,8 @@ export async function moveBillMoney(
     const need = target - have;
     if (need <= 0) return fail("Esta conta já está com o valor todo guardado.");
     if (cents > need) return fail(`Esta conta só precisa de mais ${formatEUR(need)}.`);
-    const week = await weekStats(user.id, today, user.weekStartDay);
+    const { weekStartDay } = await getUser(userId);
+    const week = await weekStats(userId, today, weekStartDay);
     if (cents > week.freeLeftCents) {
       return fail(`Você só tem ${formatEUR(Math.max(week.freeLeftCents, 0))} livres esta semana.`);
     }
@@ -257,10 +251,10 @@ export async function moveBillMoney(
     : { ...settled, savedCents: have + delta };
 
   await db.$transaction([
-    db.bill.update({ where: { id }, data: billCycleData(next) }),
+    db.bill.updateMany({ where: { id, userId }, data: billCycleData(next) }),
     db.transaction.create({
       data: {
-        userId: user.id,
+        userId,
         type: direction === "in" ? "allocation" : "withdrawal",
         amountCents: cents,
         date: toDbDate(today),

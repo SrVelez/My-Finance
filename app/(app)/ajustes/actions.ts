@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { resetAllData, updateSettings, type SettingsInput } from "@/lib/services/settings";
+import { requireUser } from "@/lib/auth/session";
 import { assertCents } from "@/lib/validate";
 
 export async function saveSettingsAction(input: SettingsInput) {
   const day = input.weekStartDay;
   if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error("Dia inválido");
-  await updateSettings({
+  const { userId } = await requireUser();
+  await updateSettings(userId, {
     name: String(input.name ?? "").trim().slice(0, 40),
     weeklyLivingCents: assertCents(input.weeklyLivingCents),
     weekStartDay: day,
@@ -17,7 +19,8 @@ export async function saveSettingsAction(input: SettingsInput) {
 }
 
 export async function resetAllDataAction() {
-  await resetAllData();
+  const { userId } = await requireUser();
+  await resetAllData(userId);
   revalidatePath("/", "layout");
   redirect("/onboarding");
 }
