@@ -1,4 +1,45 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import path from "node:path";
 import { expect, type Page } from "@playwright/test";
+
+const PORT = 3100;
+/** Onde o servidor de teste grava os códigos de login (EMAIL_TRANSPORT=file, ver playwright.config.ts). */
+export const OTP_FILE = path.resolve(".otp-e2e", "outbox.jsonl");
+
+let counter = 0;
+/** E-mail novo e único: cada teste é uma pessoa diferente, com dados só dela. */
+export const uniqueEmail = () => `e2e-${Date.now().toString(36)}-${++counter}@teste.dev`;
+
+/** Lê o último código enviado para o e-mail (o servidor de teste o grava em arquivo). */
+export async function codeFor(email: string): Promise<string> {
+  for (let i = 0; i < 100; i++) {
+    if (existsSync(OTP_FILE)) {
+      const lines = readFileSync(OTP_FILE, "utf8").trim().split("\n").filter(Boolean);
+      for (const line of lines.reverse()) {
+        const m = JSON.parse(line) as { email: string; code: string };
+        if (m.email === email) return m.code;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`Nenhum código foi enviado para ${email}`);
+}
+
+/** Apaga os códigos antigos (rode uma vez antes de tudo, se quiser um arquivo limpo). */
+export const clearOutbox = () => rmSync(OTP_FILE, { force: true });
+
+/**
+ * Entra com um e-mail novo (cria a conta) pela API do Better Auth: pede o código, lê do arquivo e
+ * confirma. O cookie de sessão fica no navegador do teste. Devolve o e-mail.
+ */
+export async function signIn(page: Page, email = uniqueEmail()): Promise<string> {
+  const headers = { origin: `http://localhost:${PORT}` };
+  const sent = await page.request.post("/api/auth/email-otp/send-verification-otp", { data: { email, type: "sign-in" }, headers });
+  expect(sent.ok(), "pedir o código").toBe(true);
+  const signed = await page.request.post("/api/auth/sign-in/email-otp", { data: { email, otp: await codeFor(email) }, headers });
+  expect(signed.ok(), "confirmar o código").toBe(true);
+  return email;
+}
 
 /** Onboarding rápido: 3 contas, €120/semana, sem metas. */
 export async function quickOnboarding(page: Page) {

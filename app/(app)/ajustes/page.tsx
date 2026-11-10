@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { requireUser } from "@/lib/auth/session";
+import { requirePageUser } from "@/lib/auth/session";
 import { getUser } from "@/lib/services/user";
 import { SettingsForm } from "./SettingsForm";
 
@@ -12,7 +12,7 @@ export default function AjustesPage() {
 }
 
 async function Ajustes() {
-  const { userId } = await requireUser();
+  const { userId } = await requirePageUser();
   const user = await getUser(userId);
   return (
     <SettingsForm

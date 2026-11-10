@@ -1,12 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { quickOnboarding, tid, typeAmount } from "./helpers";
+import { quickOnboarding, signIn, tid, typeAmount } from "./helpers";
 
 test("registrar gasto → o ritmo da semana no Resumo atualiza", async ({ page }) => {
-  // Começa do zero, qualquer que seja o estado deixado pelos outros testes.
-  await page.goto("/ajustes");
-  await page.getByRole("button", { name: "Apagar todos os dados" }).click();
-  await page.getByRole("button", { name: "Sim, apagar tudo" }).click();
-  await expect(page).toHaveURL("/onboarding");
+  // Cada teste é uma pessoa nova, sem dados.
+  await signIn(page);
   await quickOnboarding(page);
 
   // Recebi €2000 (o suficiente para sobrar livre em qualquer data)

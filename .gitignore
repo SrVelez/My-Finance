@@ -48,3 +48,7 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /prisma/*.db.bak*
+
+# códigos de login de desenvolvimento/testes
+/.otp/
+/.otp-e2e/

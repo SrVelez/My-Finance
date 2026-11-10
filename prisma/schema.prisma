@@ -14,7 +14,7 @@ datasource db {
 // RateLimit são do Better Auth (nomes e campos conforme a documentação da versão instalada).
 model User {
   id                 String        @id @default(cuid())
-  name               String
+  name               String        @default("")
   // Usuário legado (dados de antes do login) usa legado@financa.local até o claim-legacy.
   // As contas reais sempre informam o e-mail (Better Auth). O padrão gerado só existe para código que
   // cria usuários direto no banco (seeds, testes) sem se importar com e-mail.

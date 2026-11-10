@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { signIn } from "./helpers";
 
 test("onboarding: contas, metas, prioridades, prévia e começar", async ({ page }) => {
+  await signIn(page);
   await page.goto("/onboarding");
 
   // 1 · Contas fixas

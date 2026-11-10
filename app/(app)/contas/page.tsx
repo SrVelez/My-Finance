@@ -5,7 +5,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { dueSoonLabel } from "@/lib/dueLabel";
 import { formatDateChip, weekdayShort } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
-import { requireUser } from "@/lib/auth/session";
+import { requirePageUser } from "@/lib/auth/session";
 import { listBills } from "@/lib/services/bills";
 import { serverToday } from "@/lib/services/today";
 
@@ -21,7 +21,7 @@ const dueLabel = (due: string) => `${weekdayShort(due).toLowerCase()}, ${formatD
 
 async function Contas() {
   const today = await serverToday();
-  const { userId } = await requireUser();
+  const { userId } = await requirePageUser();
   const { totalCents, upcoming, paid } = await listBills(userId, today);
   // Em atraso e "a confirmar" pedem uma resposta; as demais seguem em "Próximas".
   const overdue = upcoming.filter((b) => b.open?.kind === "overdue");

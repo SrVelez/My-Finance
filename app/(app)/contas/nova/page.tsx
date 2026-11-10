@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { requirePageUser } from "@/lib/auth/session";
 import { serverToday } from "@/lib/services/today";
 import { BillForm } from "../BillForm";
 
@@ -11,5 +12,6 @@ export default function NovaContaPage() {
 }
 
 async function Nova() {
+  await requirePageUser();
   return <BillForm today={await serverToday()} />;
 }

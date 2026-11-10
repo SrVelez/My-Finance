@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { quickOnboarding, tid, toCents, typeAmount } from "./helpers";
+import { quickOnboarding, signIn, tid, toCents, typeAmount } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
 test("recebi €2000 → distribuição → confirmar → gastei €23,50", async ({ page }) => {
+  await signIn(page);
   await quickOnboarding(page);
   await expect(page.getByText("Toque em Recebi para ver quanto separar.")).toBeVisible();
 
@@ -73,6 +74,7 @@ test("recebi €2000 → distribuição → confirmar → gastei €23,50", asyn
 });
 
 test("recebi pouco: não deu para tudo → seguir com menos", async ({ page }) => {
+  await signIn(page);
   await quickOnboarding(page);
   await page.getByRole("link", { name: "+ Recebi" }).click();
   await typeAmount(page, "50");

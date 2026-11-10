@@ -1,13 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-import { quickOnboarding } from "./helpers";
+import { quickOnboarding, signIn } from "./helpers";
 
 const main = (page: Page) => page.locator("main").filter({ visible: true });
 
+/** Cada teste é uma pessoa nova, sem dados. */
 async function startFresh(page: Page) {
-  await page.goto("/ajustes");
-  await page.getByRole("button", { name: "Apagar todos os dados" }).click();
-  await page.getByRole("button", { name: "Sim, apagar tudo" }).click();
-  await expect(page).toHaveURL("/onboarding");
+  await signIn(page);
   await quickOnboarding(page);
 }
 

@@ -9,7 +9,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { formatMonthYear } from "@/lib/engine";
 import { goalStatus } from "@/lib/goalStatus";
 import { formatEUR } from "@/lib/money";
-import { requireUser } from "@/lib/auth/session";
+import { requirePageUser } from "@/lib/auth/session";
 import { getFreeLeft } from "@/lib/services/balance";
 import { getGoal } from "@/lib/services/goals";
 import { getGoalDetail } from "@/lib/services/history";
@@ -28,7 +28,7 @@ export default function MetaPage({ params }: PageProps<"/metas/[id]">) {
 async function Meta({ params }: { params: PageProps<"/metas/[id]">["params"] }) {
   const { id } = await params;
   const today = await serverToday();
-  const { userId } = await requireUser();
+  const { userId } = await requirePageUser();
   const detail = await getGoalDetail(userId, id, today);
   if (!detail) notFound();
   const { goal, history } = detail;

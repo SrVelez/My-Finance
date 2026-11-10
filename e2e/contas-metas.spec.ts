@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { quickOnboarding } from "./helpers";
+import { quickOnboarding, signIn } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -16,6 +16,7 @@ async function newBill(page: Page, name: string, amount: string, day: number) {
 }
 
 test("contas: você pagou?, atraso, vencimento próximo, editar e excluir", async ({ page }) => {
+  const email = await signIn(page);
   await quickOnboarding(page);
   await page.getByRole("link", { name: "Contas" }).click();
   await expect(page.getByText("€785 por mês · 3 contas fixas")).toBeVisible();
@@ -27,7 +28,7 @@ test("contas: você pagou?, atraso, vencimento próximo, editar e excluir", asyn
 
   // Conta antiga (criada há 30 dias) que venceu ontem, e outra que vence em 3 dias
   const db = new PrismaClient({ datasources: { db: { url: "file:./e2e.db" } } });
-  const user = await db.user.findFirstOrThrow();
+  const user = await db.user.findUniqueOrThrow({ where: { email } });
   const old = new Date(Date.now() - 30 * 86_400_000);
   await db.bill.create({ data: { userId: user.id, name: "Luz", amountCents: 5000, dueDay: yesterdayDay(), createdAt: old } });
   await db.bill.create({ data: { userId: user.id, name: "Gás", amountCents: 4000, dueDay: new Date(Date.now() + 3 * 86_400_000).getDate(), createdAt: new Date(Date.now() - 86_400_000) } });
@@ -90,6 +91,7 @@ test("contas: você pagou?, atraso, vencimento próximo, editar e excluir", asyn
 });
 
 test("metas: criar, status, reordenar e excluir", async ({ page }) => {
+  const email = await signIn(page);
   await quickOnboarding(page);
   await page.getByRole("link", { name: "Metas" }).click();
   await expect(page.getByText("€0 guardados · €0 por semana")).toBeVisible();
@@ -132,7 +134,7 @@ test("metas: criar, status, reordenar e excluir", async ({ page }) => {
 
   // Meta cujo prazo venceu: pausada, e o app pergunta o que fazer
   const db = new PrismaClient({ datasources: { db: { url: "file:./e2e.db" } } });
-  const user = await db.user.findFirstOrThrow();
+  const user = await db.user.findUniqueOrThrow({ where: { email } });
   await db.goal.create({
     data: { userId: user.id, name: "Curso antigo", targetCents: 30000, savedCents: 10000, deadline: "2026-01", priority: 50 },
   });

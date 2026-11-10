@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { tid, toCents, typeAmount } from "./helpers";
+import { signIn, tid, toCents, typeAmount } from "./helpers";
 
 test("jornada completa: onboarding → recebi → gastei → metas → ajustes → apagar tudo", async ({ page }) => {
+  await signIn(page);
+
   // Onboarding com uma meta (Reserva de emergência, €25/semana sugeridos)
   await page.goto("/onboarding");
   for (const name of ["Aluguel", "Curso", "Telefone"]) await page.getByRole("button", { name, exact: true }).click();

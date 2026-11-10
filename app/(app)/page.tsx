@@ -10,7 +10,7 @@ import { StatementList } from "@/components/StatementList";
 import { getHomeData } from "@/lib/services/home";
 import { getStatement } from "@/lib/services/statement";
 import { serverToday } from "@/lib/services/today";
-import { requireUser } from "@/lib/auth/session";
+import { getOptionalUser } from "@/lib/auth/session";
 import { getUser } from "@/lib/services/user";
 
 export default function Home() {
@@ -22,7 +22,10 @@ export default function Home() {
 }
 
 async function HomeContent() {
-  const { userId } = await requireUser();
+  // Sem sessão: Boas-vindas. (Não redireciona para "/", que levaria de volta aqui se o cookie estiver vencido.)
+  const me = await getOptionalUser();
+  if (!me) redirect("/bem-vindo");
+  const { userId } = me;
   const user = await getUser(userId);
   // Quem ainda não fez o onboarding é levado a ele.
   if (!user.onboarded) redirect("/onboarding");
