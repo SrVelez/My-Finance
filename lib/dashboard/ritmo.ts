@@ -1,4 +1,4 @@
-import { addDays, weekPool, type ISODate } from "@/lib/engine";
+import { addDays, weekPool, weekTxsOf, type ISODate } from "@/lib/engine";
 import { formatEUR, roundToEuro } from "@/lib/money";
 import type { Dashboard, DashTx } from "./types";
 
@@ -6,7 +6,7 @@ type Ritmo = NonNullable<Dashboard["ritmoSemana"]>;
 
 /** Gasto acumulado por dia contra o ritmo ideal (linear de €0 até o livre da semana). */
 export function buildRitmo(weekTxs: DashTx[], weekStart: ISODate, today: ISODate): Ritmo {
-  const livreCents = weekPool(weekTxs);
+  const livreCents = weekPool(weekTxsOf(weekTxs));
   const expenses = weekTxs.filter((t) => t.type === "expense");
 
   const dias = Array.from({ length: 7 }, (_, i) => {

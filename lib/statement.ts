@@ -152,6 +152,40 @@ export interface ItemTxRow {
   createdAt: number;
   /** Movido à mão pelo usuário (Guardar/Retirar), não por um recebimento. */
   manual?: boolean;
+  /** `adjustment`: motivo; `opening_balance`: `paid_before` marca "vencimento já pago". */
+  reason?: string | null;
+  /** `opening_balance` e `adjustment`: saldo logo depois do registro. */
+  balanceAfterCents?: Cents | null;
+  /** `adjustment` desfeito. */
+  undone?: boolean;
+}
+
+const ADJUST_LABEL: Record<string, string> = {
+  match_bank: "Saldo ajustado para bater com o banco",
+  from_free: "Guardado do livre da semana",
+  reset: "Zerado para começar de novo",
+  used: "Dinheiro usado",
+  return_to_free: "Devolvido para o livre da semana",
+};
+
+/** Saldo inicial e ajustes, iguais para contas e metas. */
+function balanceItems(r: ItemTxRow): HistoryItem[] {
+  const base = { id: r.id, date: r.date, createdAt: r.createdAt };
+  if (r.type === "opening_balance") {
+    return r.reason === "paid_before"
+      ? [{ ...base, label: "Vencimento já pago", detail: "Pago antes de usar o Finança", amountCents: 0, sign: 1, neutral: true }]
+      : [{ ...base, label: "Saldo inicial", detail: "Já estava guardado antes de usar o Finança", amountCents: r.amountCents, sign: 1 }];
+  }
+  if (r.type !== "adjustment") return [];
+
+  const after = r.balanceAfterCents;
+  const range = after == null ? "" : `De ${formatEUR(after - r.amountCents)} para ${formatEUR(after)}`;
+  const label = ADJUST_LABEL[r.reason ?? ""] ?? "Saldo ajustado";
+  const amountCents = Math.abs(r.amountCents);
+  if (r.undone) {
+    return [{ ...base, label: "Ajuste desfeito", detail: [label, range].filter(Boolean).join(" · "), amountCents, sign: 1, neutral: true }];
+  }
+  return [{ ...base, label, detail: range, amountCents, sign: r.amountCents < 0 ? -1 : 1 }];
 }
 
 const origin = (row: ItemTxRow, incomeByGroup: Map<string, Cents>) => {
@@ -176,7 +210,7 @@ export function billHistory(rows: ItemTxRow[], incomeByGroup: Map<string, Cents>
     if (r.type === "bill_payment") {
       return [{ ...base, label: "Vencimento pago", detail: "Pagamento confirmado por você", sign: -1 }];
     }
-    return [];
+    return balanceItems(r);
   });
 }
 
@@ -199,7 +233,7 @@ export function goalHistory(rows: ItemTxRow[], incomeByGroup: Map<string, Cents>
         },
       ];
     }
-    return [];
+    return balanceItems(r);
   });
 }
 

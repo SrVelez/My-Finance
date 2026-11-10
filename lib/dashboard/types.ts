@@ -67,6 +67,10 @@ export interface DashTx {
   groupId: string | null;
   shortfallCents: Cents | null;
   note: string | null;
+  /** Só em `adjustment`. */
+  affectsWeeklyFree?: boolean;
+  /** Só em `adjustment`: desfeito, não conta. */
+  undoneAt?: Date | null;
 }
 
 export interface DashGoal {
@@ -80,6 +84,11 @@ export interface DashGoal {
   priority: number;
   /** `yyyy-mm-dd` */
   createdOn: string;
+  /**
+   * De onde o ritmo esperado parte: o saldo inicial ou o último ajuste (saldo e dia).
+   * Ausente = parte de €0 no dia da criação.
+   */
+  baseline?: { cents: Cents; date: string } | null;
 }
 
 export interface DashBill {

@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { deadlinePassed, planGoal, suggestWeekly, weeksUntilDeadline, type ISODate } from "@/lib/engine";
+import { checkGoalOpening, deadlinePassed, planGoal, suggestWeekly, weeksUntilDeadline, type ISODate } from "@/lib/engine";
 import { formatEUR, type Cents } from "@/lib/money";
 import { fail, ok, type ActionResult } from "@/lib/result";
-import { toDbDate, toGoalState, weekStats } from "./state";
+import { todayISO } from "@/lib/today";
+import { createdAtOf, toDbDate, toGoalState, weekStats } from "./state";
 import { getOrCreateUser } from "./user";
 
 export interface GoalView {
@@ -81,13 +82,47 @@ async function clearOtherEmergency(userId: string, keepId: string | null) {
   });
 }
 
-export async function createGoal(input: GoalInput) {
-  const user = await getOrCreateUser();
-  const last = await db.goal.aggregate({ where: { userId: user.id }, _max: { priority: true } });
-  const goal = await db.goal.create({
-    data: { userId: user.id, ...input, priority: (last._max.priority ?? 0) + 1 },
+/**
+ * Cria a meta. Com `openingCents`, ela já nasce com esse saldo (guardado fora do app) e um
+ * `opening_balance` registra a origem. Passar do alvo é permitido: a meta nasce concluída.
+ */
+export async function createGoalFor(userId: string, input: GoalInput, openingCents: Cents = 0, today: ISODate = todayISO()) {
+  const opening = checkGoalOpening(openingCents, input.targetCents);
+  if (!opening.ok) throw new Error(opening.error);
+
+  const last = await db.goal.aggregate({ where: { userId }, _max: { priority: true } });
+  await db.$transaction(async (tx) => {
+    const goal = await tx.goal.create({
+      data: {
+        userId,
+        ...input,
+        priority: (last._max.priority ?? 0) + 1,
+        savedCents: opening.savedCents,
+        createdAt: createdAtOf(today),
+      },
+    });
+    if (opening.savedCents > 0) {
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: "opening_balance",
+          amountCents: opening.savedCents,
+          date: toDbDate(today),
+          goalId: goal.id,
+          note: goal.name,
+          balanceAfterCents: opening.savedCents,
+        },
+      });
+    }
+    if (input.isEmergency) {
+      await tx.goal.updateMany({ where: { userId, isEmergency: true, id: { not: goal.id } }, data: { isEmergency: false } });
+    }
   });
-  if (input.isEmergency) await clearOtherEmergency(user.id, goal.id);
+}
+
+export async function createGoal(input: GoalInput, openingCents: Cents = 0, today: ISODate = todayISO()) {
+  const user = await getOrCreateUser();
+  await createGoalFor(user.id, input, openingCents, today);
 }
 
 export async function updateGoal(id: string, input: GoalInput) {

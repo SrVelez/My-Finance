@@ -70,11 +70,22 @@ model Transaction {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // income | expense | allocation | withdrawal | bill_payment
+  // | opening_balance (saldo que já existia fora do app) | adjustment (correção manual de saldo)
   type        String
+  // Em `adjustment` é com sinal: negativo reduz o saldo da conta/meta.
   amountCents Int
   category    String?
   date        DateTime
   note        String?
+  // Só em `adjustment`: match_bank | from_free | reset | used | return_to_free.
+  // Em `opening_balance`: `paid_before` marca "vencimento já pago antes do Finança".
+  reason      String?
+  // Só em `adjustment`: a diferença entra ou sai do livre da semana.
+  affectsWeeklyFree Boolean @default(false)
+  // Só em `adjustment`: desfeito (o registro fica no histórico).
+  undoneAt    DateTime?
+  // Em `opening_balance` e `adjustment`: saldo da conta/meta logo depois do registro.
+  balanceAfterCents Int?
   // Só em `income`: quanto faltou para o dia a dia naquele recebimento (null = antes deste campo).
   shortfallCents Int?
   // Liga o recebimento às alocações/retiradas geradas por ele (extrato).

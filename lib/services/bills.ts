@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import {
+  checkBillOpening,
   daysBetween,
+  lastDueOnOrBefore,
   nextDue,
   openDue,
   openDueAmount,
@@ -8,11 +10,13 @@ import {
   payBill,
   settleBill,
   weeklyReceiptsUntil,
+  type BillOpeningInput,
   type ISODate,
 } from "@/lib/engine";
 import { formatEUR, type Cents } from "@/lib/money";
 import { fail, ok, type ActionResult } from "@/lib/result";
-import { billCycleData, toBillState, toDbDate, weekStats } from "./state";
+import { todayISO } from "@/lib/today";
+import { billCycleData, createdAtOf, toBillState, toDbDate, weekStats } from "./state";
 import { getOrCreateUser } from "./user";
 
 /** Vencimento que espera uma resposta do usuário. */
@@ -100,9 +104,51 @@ export interface BillInput {
   dueDay: number;
 }
 
-export async function createBill(input: BillInput) {
+/**
+ * Cria a conta. Com saldo inicial parcial, ela já nasce com esse valor guardado para o próximo
+ * vencimento; com "já paguei este mês", só fica registrado (o ciclo seguinte começa em €0, como
+ * toda conta nova cujo vencimento deste mês já passou).
+ */
+export async function createBillFor(
+  userId: string,
+  input: BillInput,
+  opening: BillOpeningInput = { mode: "none" },
+  today: ISODate = todayISO(),
+) {
+  const check = checkBillOpening(opening, input.amountCents, input.dueDay, today);
+  if (!check.ok) throw new Error(check.error);
+
+  await db.$transaction(async (tx) => {
+    const lastDue = lastDueOnOrBefore(input.dueDay, today);
+    const bill = await tx.bill.create({
+      data: {
+        userId,
+        ...input,
+        savedCents: check.savedCents,
+        createdAt: createdAtOf(today),
+        ...(check.paidBefore ? { paidThrough: lastDue, confirmedThrough: lastDue } : {}),
+      },
+    });
+    if (check.savedCents > 0 || check.paidBefore) {
+      await tx.transaction.create({
+        data: {
+          userId,
+          type: "opening_balance",
+          amountCents: check.savedCents,
+          reason: check.paidBefore ? "paid_before" : null,
+          date: toDbDate(today),
+          billId: bill.id,
+          note: bill.name,
+          balanceAfterCents: check.savedCents,
+        },
+      });
+    }
+  });
+}
+
+export async function createBill(input: BillInput, opening: BillOpeningInput = { mode: "none" }, today: ISODate = todayISO()) {
   const user = await getOrCreateUser();
-  await db.bill.create({ data: { userId: user.id, ...input } });
+  await createBillFor(user.id, input, opening, today);
 }
 
 export async function updateBill(id: string, input: BillInput) {

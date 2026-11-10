@@ -1,6 +1,6 @@
-import type { Bill, Goal } from "@prisma/client";
+import type { Bill, Goal, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
-import { weekPool, weekRange, weekSpent, type EngineBill, type EngineGoal, type EngineState, type ISODate } from "@/lib/engine";
+import { weekPool, weekRange, weekSpent, weekTxsOf, type EngineBill, type EngineGoal, type EngineState, type ISODate } from "@/lib/engine";
 import type { Cents } from "@/lib/money";
 import { todayISO } from "@/lib/today";
 import { getOrCreateUser } from "./user";
@@ -59,6 +59,9 @@ export async function loadState() {
 export const toDbDate = (iso: ISODate) => new Date(`${iso}T00:00:00.000Z`);
 export const fromDbDate = (d: Date): ISODate => d.toISOString().slice(0, 10);
 
+/** Quando um registro criado em `today` "nasceu" (meio-dia local: `todayISO(createdAt)` devolve o mesmo dia). */
+export const createdAtOf = (today: ISODate) => new Date(`${today}T12:00:00`);
+
 export interface WeekStats {
   start: ISODate;
   end: ISODate;
@@ -69,14 +72,20 @@ export interface WeekStats {
   freeLeftCents: Cents;
 }
 
-/** Livre da semana, derivado só das transações da semana que contém `date`. */
-export async function weekStats(userId: string, date: ISODate, weekStartDay: number): Promise<WeekStats> {
+/** Cliente do banco ou de uma transação interativa (para ler o livre dentro da mesma transação). */
+type TxReader = Pick<PrismaClient, "transaction">;
+
+/**
+ * Livre da semana, derivado só das transações da semana que contém `date`.
+ * Ajustes de saldo que mexem no livre entram pela tradução de `weekTxsOf`.
+ */
+export async function weekStats(userId: string, date: ISODate, weekStartDay: number, client: TxReader = db): Promise<WeekStats> {
   const { start, end } = weekRange(date, weekStartDay);
-  const txs = await db.transaction.findMany({
+  const txs = await client.transaction.findMany({
     where: { userId, date: { gte: toDbDate(start), lte: toDbDate(end) } },
-    select: { type: true, amountCents: true },
+    select: { type: true, amountCents: true, affectsWeeklyFree: true, undoneAt: true },
   });
-  const poolCents = weekPool(txs);
+  const poolCents = weekPool(weekTxsOf(txs));
   const spentCents = weekSpent(txs);
   return { start, end, poolCents, spentCents, freeLeftCents: poolCents - spentCents };
 }

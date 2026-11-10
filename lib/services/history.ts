@@ -25,7 +25,20 @@ async function incomesByGroup(userId: string, rows: { groupId: string | null }[]
   return new Map(incomes.map((i) => [i.groupId as string, i.amountCents]));
 }
 
-const toRows = (txs: { id: string; type: string; amountCents: number; date: Date; groupId: string | null; createdAt: Date; category: string | null }[]): ItemTxRow[] =>
+const toRows = (
+  txs: {
+    id: string;
+    type: string;
+    amountCents: number;
+    date: Date;
+    groupId: string | null;
+    createdAt: Date;
+    category: string | null;
+    reason: string | null;
+    balanceAfterCents: number | null;
+    undoneAt: Date | null;
+  }[],
+): ItemTxRow[] =>
   txs.map((t) => ({
     id: t.id,
     type: t.type,
@@ -34,6 +47,9 @@ const toRows = (txs: { id: string; type: string; amountCents: number; date: Date
     groupId: t.groupId,
     createdAt: t.createdAt.getTime(),
     manual: t.category === "manual",
+    reason: t.reason,
+    balanceAfterCents: t.balanceAfterCents,
+    undone: t.undoneAt !== null,
   }));
 
 export interface BillDetail {

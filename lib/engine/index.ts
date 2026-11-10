@@ -4,3 +4,4 @@ export * from "./bills";
 export * from "./goals";
 export * from "./distribute";
 export * from "./week";
+export * from "./balance";

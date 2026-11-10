@@ -34,12 +34,16 @@ function buildMeta(g: DashGoal, today: ISODate): MetaView {
     };
   }
 
-  // Esperado: semanas desde a criação ÷ semanas totais até o prazo.
-  const totalWeeks = weeksUntilDeadline(g.createdOn, g.deadline);
-  const elapsedWeeks = Math.max(0, daysBetween(g.createdOn, today)) / 7;
+  // Esperado: parte do saldo inicial (ou do último ajuste) e sobe em linha reta até o alvo no prazo:
+  // base + (alvo − base) × semanas decorridas ÷ semanas totais. Sem base, parte de €0 na criação.
+  const startCents = Math.min(g.baseline?.cents ?? 0, g.targetCents);
+  const startDate = g.baseline?.date ?? g.createdOn;
+  const totalWeeks = weeksUntilDeadline(startDate, g.deadline);
+  const elapsedWeeks = Math.max(0, daysBetween(startDate, today)) / 7;
   const expectedFraction = Math.min(1, elapsedWeeks / totalWeeks);
-  const expectedCents = Math.round(g.targetCents * expectedFraction);
-  const esperadoPct = Math.round(expectedFraction * 100);
+  const expectedCents = startCents + Math.round((g.targetCents - startCents) * expectedFraction);
+  const esperadoPct =
+    startCents === 0 ? Math.round(expectedFraction * 100) : Math.round((expectedCents / g.targetCents) * 100);
 
   if (g.savedCents >= expectedCents) {
     return { ...base, esperadoPct, status: "no_ritmo", frase: `No ritmo para ${formatMonthYear(g.deadline)}` };

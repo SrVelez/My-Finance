@@ -22,7 +22,7 @@ export async function getDashboardFor(user: DashboardUser, periodo: Periodo, tod
   const intervalo = intervaloDo(periodo, today, user.weekStartDay);
   const desde = intervaloAnterior(intervalo, periodo).inicio;
 
-  const [txs, recebimentosTotais, goals, bills] = await Promise.all([
+  const [txs, recebimentosTotais, goals, bills, goalBase] = await Promise.all([
     db.transaction.findMany({
       where: { userId: user.id, date: { gte: toDbDate(desde), lte: toDbDate(intervalo.fim) } },
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
@@ -30,7 +30,19 @@ export async function getDashboardFor(user: DashboardUser, periodo: Periodo, tod
     db.transaction.count({ where: { userId: user.id, type: "income" } }),
     db.goal.findMany({ where: { userId: user.id } }),
     db.bill.findMany({ where: { userId: user.id } }),
+    // Saldo inicial e ajustes ativos de metas: de onde o ritmo esperado parte.
+    db.transaction.findMany({
+      where: { userId: user.id, goalId: { not: null }, type: { in: ["opening_balance", "adjustment"] }, undoneAt: null },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+      select: { goalId: true, date: true, balanceAfterCents: true },
+    }),
   ]);
+
+  // O último registro de cada meta vence: é o saldo mais recente conhecido de fora do fluxo normal.
+  const baselines = new Map<string, { cents: number; date: string }>();
+  for (const t of goalBase) {
+    if (t.goalId && t.balanceAfterCents !== null) baselines.set(t.goalId, { cents: t.balanceAfterCents, date: fromDbDate(t.date) });
+  }
 
   const dashTxs: DashTx[] = txs.map((t) => ({
     id: t.id,
@@ -41,6 +53,8 @@ export async function getDashboardFor(user: DashboardUser, periodo: Periodo, tod
     groupId: t.groupId,
     shortfallCents: t.shortfallCents,
     note: t.note,
+    affectsWeeklyFree: t.affectsWeeklyFree,
+    undoneAt: t.undoneAt,
   }));
 
   const dashGoals: DashGoal[] = goals.map((g) => ({
@@ -52,6 +66,7 @@ export async function getDashboardFor(user: DashboardUser, periodo: Periodo, tod
     weeklyCents: g.weeklyCents,
     priority: g.priority,
     createdOn: fromDbDate(g.createdAt),
+    baseline: baselines.get(g.id) ?? null,
   }));
 
   const dashBills: DashBill[] = bills.map((row) => {
