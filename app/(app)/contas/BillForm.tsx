@@ -3,29 +3,36 @@
 import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
+import { BillOpening } from "@/components/OpeningBalance";
 import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { useAction } from "@/components/ui/useAction";
+import { checkBillOpening, type BillOpeningInput } from "@/lib/engine";
 import { createBillAction, deleteBillAction, updateBillAction } from "./actions";
 
 interface Props {
   bill?: { id: string; name: string; amountCents: number; dueDay: number };
+  /** Data do servidor, para validar o saldo inicial de uma conta nova. */
+  today?: string;
 }
 
-export function BillForm({ bill }: Props) {
+export function BillForm({ bill, today = "" }: Props) {
   const [name, setName] = useState(bill?.name ?? "");
   const [amountCents, setAmountCents] = useState(bill?.amountCents ?? 0);
   const [dueDay, setDueDay] = useState(bill?.dueDay ?? 1);
+  const [opening, setOpening] = useState<BillOpeningInput>({ mode: "none" });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
 
-  const valid = name.trim() !== "" && amountCents > 0 && dueDay >= 1 && dueDay <= 31;
+  // Saldo inicial só existe ao criar; depois, o saldo se corrige em "Ajustar saldo".
+  const openingOk = bill ? true : checkBillOpening(opening, amountCents, dueDay, today).ok;
+  const valid = name.trim() !== "" && amountCents > 0 && dueDay >= 1 && dueDay <= 31 && openingOk;
 
   const save = () =>
     run(() =>
       bill
         ? updateBillAction(bill.id, { name, amountCents, dueDay })
-        : createBillAction({ name, amountCents, dueDay }),
+        : createBillAction({ name, amountCents, dueDay }, opening),
     );
 
   return (
@@ -59,6 +66,7 @@ export function BillForm({ bill }: Props) {
             />
           </label>
         </div>
+        {!bill && <BillOpening value={opening} onChange={setOpening} amountCents={amountCents} dueDay={dueDay} today={today} />}
         {error && <FormError>{error}</FormError>}
       </main>
       <footer className="space-y-2 px-5 pt-4 pb-5">

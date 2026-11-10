@@ -2,6 +2,8 @@ import { execSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { sanitizeDraft, toEngineState, type OnboardingDraft } from "@/lib/draft";
+import { distribute } from "@/lib/engine";
 import { euros } from "@/lib/money";
 
 // Integração: banco SQLite próprio (nunca o de desenvolvimento). Data fixa: terça, 10/nov/2026.
@@ -18,6 +20,7 @@ describe("saldo inicial e ajuste de saldo (banco real)", () => {
   let goals: typeof import("@/lib/services/goals");
   let state: typeof import("@/lib/services/state");
   let engine: typeof import("@/lib/engine");
+  let onboarding: typeof import("@/lib/services/onboarding");
 
   beforeAll(async () => {
     for (const f of ["vitest-balance.db", "vitest-balance.db-journal"]) rmSync(path.join(__dirname, "../prisma", f), { force: true });
@@ -28,6 +31,7 @@ describe("saldo inicial e ajuste de saldo (banco real)", () => {
     goals = await import("@/lib/services/goals");
     state = await import("@/lib/services/state");
     engine = await import("@/lib/engine");
+    onboarding = await import("@/lib/services/onboarding");
   }, 60_000);
 
   afterAll(async () => {
@@ -254,6 +258,85 @@ describe("saldo inicial e ajuste de saldo (banco real)", () => {
 
       expect((await db.goal.findUniqueOrThrow({ where: { id: reserva.id } })).savedCents).toBe(euros(100));
       expect((await lastBill(a.id, "Aluguel")).savedCents).toBe(euros(200));
+    });
+  });
+
+  describe("14. onboarding com saldos iniciais", () => {
+    const draft = (): OnboardingDraft => ({
+      weeklyLivingCents: euros(120),
+      bills: [
+        { id: "b1", name: "Aluguel", amountCents: euros(640), dueDay: 1, opening: { mode: "partial", cents: euros(200) } },
+        { id: "b2", name: "Curso", amountCents: euros(125), dueDay: 10, opening: { mode: "paid" } },
+        { id: "b3", name: "Telefone", amountCents: euros(20), dueDay: 20 },
+      ],
+      goals: [
+        { id: "g1", name: "Viagem", targetCents: euros(600), deadline: "2027-06", weeklyCents: null, isEmergency: false, openingCents: euros(200) },
+        { id: "g2", name: "Reserva de emergência", targetCents: euros(400), deadline: null, weeklyCents: euros(25), isEmergency: true, openingCents: euros(150) },
+      ],
+    });
+
+    it("a prévia usa os saldos iniciais e não grava nada; nem muda o rascunho", async () => {
+      const u = await newUser("o14-previa");
+      const d = draft();
+      const before = JSON.stringify(d);
+      const comSaldo = distribute({ incomeCents: euros(500), date: TODAY, state: toEngineState(d, TODAY), assumeFreshCycle: true });
+      const zerado = distribute({
+        incomeCents: euros(500),
+        date: TODAY,
+        state: toEngineState({ ...d, bills: d.bills.map((b) => ({ ...b, opening: undefined })), goals: d.goals.map((g) => ({ ...g, openingCents: 0 })) }, TODAY),
+        assumeFreshCycle: true,
+      });
+      expect(comSaldo.toSaveCents).toBeLessThan(zerado.toSaveCents);
+      expect(JSON.stringify(d)).toBe(before);
+      expect(await db.bill.count({ where: { userId: u.id } })).toBe(0);
+      expect(await db.goal.count({ where: { userId: u.id } })).toBe(0);
+      expect(await db.transaction.count({ where: { userId: u.id } })).toBe(0);
+    });
+
+    it("\"Começar a usar\" grava contas, metas e saldos iniciais de uma vez", async () => {
+      const u = await newUser("o14-grava");
+      await onboarding.completeOnboardingFor(u.id, sanitizeDraft(draft()), TODAY);
+
+      expect(await db.bill.count({ where: { userId: u.id } })).toBe(3);
+      expect(await db.goal.count({ where: { userId: u.id } })).toBe(2);
+      expect((await lastBill(u.id, "Aluguel")).savedCents).toBe(euros(200));
+      expect((await lastGoal(u.id, "Viagem")).savedCents).toBe(euros(200));
+      expect((await lastGoal(u.id, "Reserva de emergência")).isEmergency).toBe(true);
+      expect((await db.user.findUniqueOrThrow({ where: { id: u.id } })).onboarded).toBe(true);
+
+      const opens = await db.transaction.findMany({ where: { userId: u.id, type: "opening_balance" } });
+      expect(opens.map((t) => [t.note, t.amountCents, t.reason]).sort()).toEqual(
+        [
+          ["Aluguel", euros(200), null],
+          ["Curso", 0, "paid_before"],
+          ["Reserva de emergência", euros(150), null],
+          ["Viagem", euros(200), null],
+        ].sort(),
+      );
+      // Nada disso é receita nem mexe no livre da semana.
+      expect(await db.transaction.count({ where: { userId: u.id, type: { in: ["income", "allocation", "withdrawal"] } } })).toBe(0);
+      expect(await pool(u)).toBe(0);
+    });
+
+    it("se um saldo for inválido, nada é gravado e o que existia continua", async () => {
+      const u = await newUser("o14-atomico");
+      await bills.createBillFor(u.id, { name: "Antiga", amountCents: euros(10), dueDay: 5 }, { mode: "none" }, TODAY);
+      const ruim = draft();
+      ruim.goals.push({ id: "g3", name: "Outra", targetCents: euros(100), deadline: null, weeklyCents: 0, isEmergency: false, openingCents: -5 });
+
+      await expect(onboarding.completeOnboardingFor(u.id, ruim, TODAY)).rejects.toThrow("Informe um valor maior ou igual a zero.");
+      expect((await db.bill.findMany({ where: { userId: u.id } })).map((b) => b.name)).toEqual(["Antiga"]);
+      expect(await db.goal.count({ where: { userId: u.id } })).toBe(0);
+    });
+
+    it("o rascunho vindo do cliente é validado: saldo acima da conta ou modo desconhecido são recusados", () => {
+      const d = draft();
+      expect(() => sanitizeDraft({ ...d, bills: [{ ...d.bills[0], opening: { mode: "partial", cents: euros(700) } }] })).toThrow("Saldo inicial inválido");
+      expect(() => sanitizeDraft({ ...d, bills: [{ ...d.bills[0], opening: { mode: "hack" } }] })).toThrow("Saldo inicial inválido");
+      expect(() => sanitizeDraft({ ...d, goals: [{ ...d.goals[0], openingCents: -1 }] })).toThrow("Saldo inicial inválido");
+      const ok = sanitizeDraft(d);
+      expect(ok.bills.map((b) => b.opening)).toEqual([{ mode: "partial", cents: euros(200) }, { mode: "paid" }, { mode: "none" }]);
+      expect(ok.goals.map((g) => g.openingCents)).toEqual([euros(200), euros(150)]);
     });
   });
 });

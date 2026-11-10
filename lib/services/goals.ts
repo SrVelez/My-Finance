@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { checkGoalOpening, deadlinePassed, planGoal, suggestWeekly, weeksUntilDeadline, type ISODate } from "@/lib/engine";
 import { formatEUR, type Cents } from "@/lib/money";
@@ -86,38 +87,48 @@ async function clearOtherEmergency(userId: string, keepId: string | null) {
  * Cria a meta. Com `openingCents`, ela já nasce com esse saldo (guardado fora do app) e um
  * `opening_balance` registra a origem. Passar do alvo é permitido: a meta nasce concluída.
  */
-export async function createGoalFor(userId: string, input: GoalInput, openingCents: Cents = 0, today: ISODate = todayISO()) {
+export async function createGoalIn(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  input: GoalInput,
+  openingCents: Cents,
+  today: ISODate,
+  { keepEmergencyFlags = false }: { keepEmergencyFlags?: boolean } = {},
+) {
   const opening = checkGoalOpening(openingCents, input.targetCents);
   if (!opening.ok) throw new Error(opening.error);
 
-  const last = await db.goal.aggregate({ where: { userId }, _max: { priority: true } });
-  await db.$transaction(async (tx) => {
-    const goal = await tx.goal.create({
+  const last = await tx.goal.aggregate({ where: { userId }, _max: { priority: true } });
+  const goal = await tx.goal.create({
+    data: {
+      userId,
+      ...input,
+      priority: (last._max.priority ?? 0) + 1,
+      savedCents: opening.savedCents,
+      createdAt: createdAtOf(today),
+    },
+  });
+  if (opening.savedCents > 0) {
+    await tx.transaction.create({
       data: {
         userId,
-        ...input,
-        priority: (last._max.priority ?? 0) + 1,
-        savedCents: opening.savedCents,
-        createdAt: createdAtOf(today),
+        type: "opening_balance",
+        amountCents: opening.savedCents,
+        date: toDbDate(today),
+        goalId: goal.id,
+        note: goal.name,
+        balanceAfterCents: opening.savedCents,
       },
     });
-    if (opening.savedCents > 0) {
-      await tx.transaction.create({
-        data: {
-          userId,
-          type: "opening_balance",
-          amountCents: opening.savedCents,
-          date: toDbDate(today),
-          goalId: goal.id,
-          note: goal.name,
-          balanceAfterCents: opening.savedCents,
-        },
-      });
-    }
-    if (input.isEmergency) {
-      await tx.goal.updateMany({ where: { userId, isEmergency: true, id: { not: goal.id } }, data: { isEmergency: false } });
-    }
-  });
+  }
+  // Só uma meta pode ser a reserva de emergência.
+  if (input.isEmergency && !keepEmergencyFlags) {
+    await tx.goal.updateMany({ where: { userId, isEmergency: true, id: { not: goal.id } }, data: { isEmergency: false } });
+  }
+}
+
+export async function createGoalFor(userId: string, input: GoalInput, openingCents: Cents = 0, today: ISODate = todayISO()) {
+  await db.$transaction((tx) => createGoalIn(tx, userId, input, openingCents, today));
 }
 
 export async function createGoal(input: GoalInput, openingCents: Cents = 0, today: ISODate = todayISO()) {

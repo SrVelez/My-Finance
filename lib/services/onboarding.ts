@@ -1,35 +1,40 @@
 import { db } from "@/lib/db";
 import type { OnboardingDraft } from "@/lib/draft";
+import type { ISODate } from "@/lib/engine";
+import { todayISO } from "@/lib/today";
+import { createBillIn } from "./bills";
+import { createGoalIn } from "./goals";
 import { getOrCreateUser } from "./user";
 
-/** Grava o resultado do onboarding; substitui contas, metas e transações do usuário. */
-export async function completeOnboarding(draft: OnboardingDraft) {
+/**
+ * Grava o resultado do onboarding; substitui contas, metas e transações do usuário.
+ * Contas, metas e saldos iniciais entram juntos, numa única transação: se algo for inválido, nada é gravado.
+ */
+export async function completeOnboardingFor(userId: string, draft: OnboardingDraft, today: ISODate = todayISO()) {
+  await db.$transaction(async (tx) => {
+    await tx.transaction.deleteMany({ where: { userId } });
+    await tx.bill.deleteMany({ where: { userId } });
+    await tx.goal.deleteMany({ where: { userId } });
+    await tx.user.update({ where: { id: userId }, data: { weeklyLivingCents: draft.weeklyLivingCents, onboarded: true } });
+
+    for (const b of draft.bills) {
+      await createBillIn(tx, userId, { name: b.name, amountCents: b.amountCents, dueDay: b.dueDay }, b.opening ?? { mode: "none" }, today);
+    }
+    for (const g of draft.goals) {
+      await createGoalIn(
+        tx,
+        userId,
+        { name: g.name, targetCents: g.targetCents, deadline: g.deadline, weeklyCents: g.deadline ? 0 : (g.weeklyCents ?? 0), isEmergency: g.isEmergency },
+        g.openingCents ?? 0,
+        today,
+        // O onboarding grava as metas como o usuário marcou, sem escolher uma única reserva.
+        { keepEmergencyFlags: true },
+      );
+    }
+  });
+}
+
+export async function completeOnboarding(draft: OnboardingDraft, today: ISODate = todayISO()) {
   const user = await getOrCreateUser();
-  await db.$transaction([
-    db.transaction.deleteMany({ where: { userId: user.id } }),
-    db.bill.deleteMany({ where: { userId: user.id } }),
-    db.goal.deleteMany({ where: { userId: user.id } }),
-    db.user.update({
-      where: { id: user.id },
-      data: { weeklyLivingCents: draft.weeklyLivingCents, onboarded: true },
-    }),
-    ...draft.bills.map((b) =>
-      db.bill.create({
-        data: { userId: user.id, name: b.name, amountCents: b.amountCents, dueDay: b.dueDay },
-      }),
-    ),
-    ...draft.goals.map((g, i) =>
-      db.goal.create({
-        data: {
-          userId: user.id,
-          name: g.name,
-          targetCents: g.targetCents,
-          deadline: g.deadline,
-          weeklyCents: g.deadline ? 0 : (g.weeklyCents ?? 0),
-          priority: i + 1,
-          isEmergency: g.isEmergency,
-        },
-      }),
-    ),
-  ]);
+  await completeOnboardingFor(user.id, draft, today);
 }

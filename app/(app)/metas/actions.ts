@@ -30,8 +30,8 @@ const refresh = () => {
   revalidatePath("/");
 };
 
-export async function createGoalAction(input: GoalInput) {
-  await createGoal(parse(input));
+export async function createGoalAction(input: GoalInput, openingCents = 0) {
+  await createGoal(parse(input), assertCents(openingCents), await serverToday());
   refresh();
   redirect("/metas");
 }

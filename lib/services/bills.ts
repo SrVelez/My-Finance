@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   checkBillOpening,
@@ -109,41 +110,49 @@ export interface BillInput {
  * vencimento; com "já paguei este mês", só fica registrado (o ciclo seguinte começa em €0, como
  * toda conta nova cujo vencimento deste mês já passou).
  */
+export async function createBillIn(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  input: BillInput,
+  opening: BillOpeningInput,
+  today: ISODate,
+) {
+  const check = checkBillOpening(opening, input.amountCents, input.dueDay, today);
+  if (!check.ok) throw new Error(check.error);
+
+  const lastDue = lastDueOnOrBefore(input.dueDay, today);
+  const bill = await tx.bill.create({
+    data: {
+      userId,
+      ...input,
+      savedCents: check.savedCents,
+      createdAt: createdAtOf(today),
+      ...(check.paidBefore ? { paidThrough: lastDue, confirmedThrough: lastDue } : {}),
+    },
+  });
+  if (check.savedCents > 0 || check.paidBefore) {
+    await tx.transaction.create({
+      data: {
+        userId,
+        type: "opening_balance",
+        amountCents: check.savedCents,
+        reason: check.paidBefore ? "paid_before" : null,
+        date: toDbDate(today),
+        billId: bill.id,
+        note: bill.name,
+        balanceAfterCents: check.savedCents,
+      },
+    });
+  }
+}
+
 export async function createBillFor(
   userId: string,
   input: BillInput,
   opening: BillOpeningInput = { mode: "none" },
   today: ISODate = todayISO(),
 ) {
-  const check = checkBillOpening(opening, input.amountCents, input.dueDay, today);
-  if (!check.ok) throw new Error(check.error);
-
-  await db.$transaction(async (tx) => {
-    const lastDue = lastDueOnOrBefore(input.dueDay, today);
-    const bill = await tx.bill.create({
-      data: {
-        userId,
-        ...input,
-        savedCents: check.savedCents,
-        createdAt: createdAtOf(today),
-        ...(check.paidBefore ? { paidThrough: lastDue, confirmedThrough: lastDue } : {}),
-      },
-    });
-    if (check.savedCents > 0 || check.paidBefore) {
-      await tx.transaction.create({
-        data: {
-          userId,
-          type: "opening_balance",
-          amountCents: check.savedCents,
-          reason: check.paidBefore ? "paid_before" : null,
-          date: toDbDate(today),
-          billId: bill.id,
-          note: bill.name,
-          balanceAfterCents: check.savedCents,
-        },
-      });
-    }
-  });
+  await db.$transaction((tx) => createBillIn(tx, userId, input, opening, today));
 }
 
 export async function createBill(input: BillInput, opening: BillOpeningInput = { mode: "none" }, today: ISODate = todayISO()) {

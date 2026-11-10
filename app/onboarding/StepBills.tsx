@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { BillOpening } from "@/components/OpeningBalance";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { BILL_PRESETS, newId, type DraftBill } from "@/lib/draft";
+import { checkBillOpening } from "@/lib/engine";
 import { formatEUR } from "@/lib/money";
+import { todayISO } from "@/lib/today";
 import { Shell } from "./Shell";
 import type { StepProps } from "./OnboardingFlow";
 
@@ -28,9 +31,10 @@ export function StepBills({ draft, update, go }: StepProps) {
     setEditing(id);
   };
 
+  const openingOk = (b: DraftBill) => checkBillOpening(b.opening ?? { mode: "none" }, b.amountCents, b.dueDay, todayISO()).ok;
   const valid =
     draft.weeklyLivingCents > 0 &&
-    draft.bills.every((b) => b.name.trim() && b.amountCents > 0 && b.dueDay >= 1 && b.dueDay <= 31);
+    draft.bills.every((b) => b.name.trim() && b.amountCents > 0 && b.dueDay >= 1 && b.dueDay <= 31 && openingOk(b));
 
   return (
     <Shell
@@ -65,7 +69,16 @@ export function StepBills({ draft, update, go }: StepProps) {
               >
                 <span>
                   <span className="block font-semibold">{b.name || "Nova conta"}</span>
-                  <span className="block text-xs text-muted">Vence todo dia {b.dueDay}</span>
+                  <span className={`block text-xs ${openingOk(b) ? "text-muted" : "font-semibold text-warn-ink"}`}>
+                    Vence todo dia {b.dueDay}
+                    {!openingOk(b)
+                      ? " · revise o saldo inicial"
+                      : b.opening?.mode === "partial" && b.opening.cents > 0
+                        ? ` · ${formatEUR(b.opening.cents)} já guardados`
+                        : b.opening?.mode === "paid"
+                          ? " · já paga este mês"
+                          : ""}
+                  </span>
                 </span>
                 <span className="text-lg font-extrabold">{formatEUR(b.amountCents)}</span>
               </button>
@@ -103,6 +116,12 @@ export function StepBills({ draft, update, go }: StepProps) {
                       />
                     </label>
                   </div>
+                  <BillOpening
+                    value={b.opening ?? { mode: "none" }}
+                    onChange={(opening) => patch(b.id, { opening })}
+                    amountCents={b.amountCents}
+                    dueDay={b.dueDay}
+                  />
                   <Button variant="ghost" className="min-h-11 text-warn-ink" onClick={() => remove(b.id)}>
                     Remover conta
                   </Button>

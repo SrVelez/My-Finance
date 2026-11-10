@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { GoalOpening } from "@/components/OpeningBalance";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { MoneyField } from "@/components/ui/MoneyField";
@@ -127,6 +128,13 @@ export function StepGoals({ draft, update, go }: StepProps) {
                   />
                 </div>
               )}
+              <GoalOpening
+                value={g.openingCents ?? 0}
+                onChange={(openingCents) => patch(g.id, { openingCents })}
+                targetCents={g.targetCents}
+                deadline={g.deadline}
+                weeklyCents={effectiveWeekly(g)}
+              />
               <div className="flex items-center justify-between">
                 <Button variant="ghost" className="w-auto text-warn-ink" onClick={() => remove(g.id)}>
                   Remover
@@ -147,6 +155,7 @@ export function StepGoals({ draft, update, go }: StepProps) {
                   <span className="block font-semibold">{g.name || "Nova meta"}</span>
                   <span className="block text-xs text-muted">
                     {g.deadline ? `Até ${formatMonthYear(g.deadline)}` : "Sem prazo"}
+                    {g.openingCents ? ` · ${formatEUR(g.openingCents)} já guardados` : ""}
                   </span>
                 </span>
                 <span className="text-lg font-extrabold">{formatEUR(g.targetCents)}</span>

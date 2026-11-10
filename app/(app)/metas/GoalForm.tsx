@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FlowHeader } from "@/components/FlowHeader";
 import { Button } from "@/components/ui/Button";
+import { GoalOpening } from "@/components/OpeningBalance";
 import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
 import { useAction } from "@/components/ui/useAction";
@@ -30,6 +31,7 @@ export function GoalForm({ goal, minMonth }: Props) {
   // null = usar a sugestão (alvo/16 semanas).
   const [weekly, setWeekly] = useState<number | null>(goal && !goal.deadline ? goal.weeklyCents : null);
   const [isEmergency, setIsEmergency] = useState(goal?.isEmergency ?? false);
+  const [openingCents, setOpeningCents] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { run, pending, error } = useAction("Não foi possível salvar. Tente de novo.");
 
@@ -39,7 +41,7 @@ export function GoalForm({ goal, minMonth }: Props) {
 
   const save = () => {
     const input = { name, targetCents, deadline, weeklyCents: deadline ? 0 : effectiveWeekly, isEmergency };
-    return run(() => (goal ? updateGoalAction(goal.id, input) : createGoalAction(input)));
+    return run(() => (goal ? updateGoalAction(goal.id, input) : createGoalAction(input, openingCents)));
   };
 
   return (
@@ -86,6 +88,16 @@ export function GoalForm({ goal, minMonth }: Props) {
               className="bg-surface"
             />
           </div>
+        )}
+
+        {!goal && (
+          <GoalOpening
+            value={openingCents}
+            onChange={setOpeningCents}
+            targetCents={targetCents}
+            deadline={deadline}
+            weeklyCents={effectiveWeekly}
+          />
         )}
 
         <label className="flex min-h-11 items-center gap-3 text-sm">

@@ -9,6 +9,7 @@ import {
   updateBill,
   type BillInput,
 } from "@/lib/services/bills";
+import type { BillOpeningInput } from "@/lib/engine";
 import { fail, type ActionResult } from "@/lib/result";
 import { serverToday } from "@/lib/services/today";
 import { assertCents, assertDueDay, assertName } from "@/lib/validate";
@@ -21,13 +22,21 @@ function parse(input: BillInput): BillInput {
   };
 }
 
+/** Saldo inicial vindo do cliente: só os três modos conhecidos. */
+function parseOpening(input: BillOpeningInput | undefined): BillOpeningInput {
+  if (!input || input.mode === "none") return { mode: "none" };
+  if (input.mode === "paid") return { mode: "paid" };
+  if (input.mode === "partial") return { mode: "partial", cents: assertCents(input.cents) };
+  throw new Error("Saldo inicial inválido");
+}
+
 const refresh = () => {
   revalidatePath("/contas");
   revalidatePath("/");
 };
 
-export async function createBillAction(input: BillInput) {
-  await createBill(parse(input));
+export async function createBillAction(input: BillInput, opening?: BillOpeningInput) {
+  await createBill(parse(input), parseOpening(opening), await serverToday());
   refresh();
   redirect("/contas");
 }

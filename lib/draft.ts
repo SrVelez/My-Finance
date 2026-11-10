@@ -1,5 +1,5 @@
 import { euros, type Cents } from "@/lib/money";
-import { suggestWeekly, type EngineState } from "@/lib/engine";
+import { suggestWeekly, type BillOpeningInput, type EngineState } from "@/lib/engine";
 import { isDeadline, MAX_CENTS } from "@/lib/validate";
 
 export interface DraftBill {
@@ -9,6 +9,8 @@ export interface DraftBill {
   name: string;
   amountCents: Cents;
   dueDay: number;
+  /** Saldo inicial: do zero (padrão), uma parte já guardada ou "já paguei este mês". */
+  opening?: BillOpeningInput;
 }
 
 export interface DraftGoal {
@@ -21,6 +23,8 @@ export interface DraftGoal {
   /** Valor semanal escolhido; null = usar a sugestão. */
   weeklyCents: Cents | null;
   isEmergency: boolean;
+  /** Quanto já está guardado para a meta (0 = começar do zero). */
+  openingCents?: Cents;
 }
 
 export interface OnboardingDraft {
@@ -59,7 +63,7 @@ export function toEngineState(draft: OnboardingDraft, today: string): EngineStat
       name: b.name,
       amountCents: b.amountCents,
       dueDay: b.dueDay,
-      savedCents: 0,
+      savedCents: b.opening?.mode === "partial" ? b.opening.cents : 0,
       paidThrough: null,
       consumedCents: 0,
       unpaidDue: null,
@@ -71,7 +75,7 @@ export function toEngineState(draft: OnboardingDraft, today: string): EngineStat
       id: g.id,
       name: g.name,
       targetCents: g.targetCents,
-      savedCents: 0,
+      savedCents: g.openingCents ?? 0,
       deadline: g.deadline,
       weeklyCents: g.deadline ? 0 : effectiveWeekly(g),
       priority: i + 1,
@@ -83,6 +87,15 @@ export function toEngineState(draft: OnboardingDraft, today: string): EngineStat
 const isInt = (n: unknown, min: number, max: number): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= min && n <= max;
 
+/** Saldo inicial de uma conta vindo do cliente: só os três modos, e o valor parcial até o valor da conta. */
+function sanitizeBillOpening(input: unknown, amountCents: Cents): BillOpeningInput {
+  const o = input as { mode?: unknown; cents?: unknown } | null | undefined;
+  if (!o || o.mode === "none" || o.mode === undefined) return { mode: "none" };
+  if (o.mode === "paid") return { mode: "paid" };
+  if (o.mode === "partial" && isInt(o.cents, 0, amountCents)) return { mode: "partial", cents: o.cents };
+  throw new Error("Saldo inicial inválido");
+}
+
 /** Valida o rascunho vindo do cliente (Server Actions são alcançáveis por POST direto). */
 export function sanitizeDraft(input: unknown): OnboardingDraft {
   const raw = input as Partial<OnboardingDraft> | null;
@@ -92,14 +105,16 @@ export function sanitizeDraft(input: unknown): OnboardingDraft {
   const bills = raw.bills.slice(0, 30).map((b: DraftBill) => {
     const name = String(b.name ?? "").trim().slice(0, 40);
     if (!name || !isInt(b.amountCents, 1, MAX_CENTS) || !isInt(b.dueDay, 1, 31)) throw new Error("Conta inválida");
-    return { id: newId(), name, amountCents: b.amountCents, dueDay: b.dueDay };
+    return { id: newId(), name, amountCents: b.amountCents, dueDay: b.dueDay, opening: sanitizeBillOpening(b.opening, b.amountCents) };
   });
 
   const goals = raw.goals.slice(0, 30).map((g: DraftGoal) => {
     const name = String(g.name ?? "").trim().slice(0, 40);
     const deadline = isDeadline(g.deadline) ? g.deadline : null;
     const weekly = g.weeklyCents ?? suggestWeekly(Number(g.targetCents));
+    const openingCents = g.openingCents ?? 0;
     if (!name || !isInt(g.targetCents, 1, MAX_CENTS) || !isInt(weekly, 0, MAX_CENTS)) throw new Error("Meta inválida");
+    if (!isInt(openingCents, 0, MAX_CENTS)) throw new Error("Saldo inicial inválido");
     return {
       id: newId(),
       name,
@@ -107,6 +122,7 @@ export function sanitizeDraft(input: unknown): OnboardingDraft {
       deadline,
       weeklyCents: weekly,
       isEmergency: g.isEmergency === true,
+      openingCents,
     };
   });
 
