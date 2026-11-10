@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ResetBalances } from "@/components/ResetBalances";
 import { Button } from "@/components/ui/Button";
 import { FormError } from "@/components/ui/FormError";
 import { MoneyField } from "@/components/ui/MoneyField";
@@ -80,6 +81,8 @@ export function SettingsForm({
           </p>
         )}
       </section>
+
+      <ResetBalances />
 
       <section className="space-y-3 rounded-card border border-line bg-surface p-4">
         <h2 className="font-bold">Apagar todos os dados</h2>

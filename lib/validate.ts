@@ -1,6 +1,9 @@
 /** Maior valor aceito em qualquer campo de dinheiro: €1.000.000, em centavos. */
 export const MAX_CENTS = 100_000_000;
 
+/** Palavra que a pessoa digita para confirmar "Recomeçar saldos". */
+export const RESET_WORD = "ZERAR";
+
 /** Prazo de meta no formato `yyyy-mm`. */
 export const isDeadline = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);

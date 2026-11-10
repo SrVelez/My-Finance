@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { isAdjustReason } from "@/lib/engine";
-import { adjustBalance, undoAdjustment, type AdjustResult } from "@/lib/services/balance";
+import { adjustBalance, resetAllBalances, undoAdjustment, undoBatch, type AdjustResult, type ResetResult } from "@/lib/services/balance";
 import { moveBillMoney } from "@/lib/services/bills";
 import { moveGoalMoney } from "@/lib/services/goals";
 import { fail, type ActionResult } from "@/lib/result";
 import { serverToday } from "@/lib/services/today";
-import { assertCents } from "@/lib/validate";
+import { assertCents, RESET_WORD } from "@/lib/validate";
 
 /** Guardar (do livre) ou retirar (para o livre) dinheiro de uma conta ou meta, à mão. */
 export async function moveMoneyAction(
@@ -56,6 +56,33 @@ export async function undoAdjustmentAction(adjustmentId: string): Promise<Action
   if (typeof adjustmentId !== "string") return fail("Pedido inválido.");
   try {
     const result = await undoAdjustment(adjustmentId, await serverToday());
+    if (result.ok) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return fail("Não foi possível desfazer. Tente de novo.");
+  }
+}
+
+/**
+ * "Recomeçar saldos": zera todas as contas e metas, mantendo configuração e histórico.
+ * Diferente de "Apagar todos os dados". A confirmação digitada também é conferida aqui.
+ */
+export async function resetAllBalancesAction(confirmation: string): Promise<ResetResult> {
+  if (confirmation !== RESET_WORD) return { ok: false, error: `Digite ${RESET_WORD} para confirmar.` };
+  try {
+    const result = await resetAllBalances(await serverToday());
+    if (result.ok) revalidatePath("/", "layout");
+    return result;
+  } catch {
+    return { ok: false, error: "Não foi possível zerar os saldos. Tente de novo." };
+  }
+}
+
+/** Desfaz de uma vez o último "Recomeçar saldos" (todos os ajustes do mesmo grupo). */
+export async function undoBatchAction(groupId: string): Promise<ActionResult> {
+  if (typeof groupId !== "string") return fail("Pedido inválido.");
+  try {
+    const result = await undoBatch(groupId, await serverToday());
     if (result.ok) revalidatePath("/", "layout");
     return result;
   } catch {

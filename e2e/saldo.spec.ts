@@ -87,3 +87,46 @@ test("ajustar saldo: reduzir devolvendo ao livre e bloqueio ao aumentar sem livr
   await page.getByRole("link", { name: "Início" }).click();
   await expect(page.getByText("de €50 · você já gastou €0")).toBeVisible();
 });
+
+test("Recomeçar saldos: exige digitar ZERAR, zera tudo e desfaz em lote", async ({ page }) => {
+  await startFresh(page);
+  for (const [nome, alvo, guardado] of [["Viagem", "600", "200"], ["Reserva", "400", "150"]]) {
+    await page.goto("/metas/nova");
+    await page.getByLabel("Nome").fill(nome);
+    await page.getByLabel("Quanto juntar").fill(alvo);
+    await page.getByRole("radio", { name: "Sim, já tenho" }).click();
+    await page.getByLabel("Quanto já está guardado?").fill(guardado);
+    await page.getByRole("button", { name: "Salvar" }).click();
+    await expect(page).toHaveURL("/metas");
+  }
+  await expect(main(page)).toContainText("€350 guardados");
+
+  await page.getByRole("link", { name: "Ajustes" }).click();
+  await page.getByRole("button", { name: "Recomeçar saldos" }).click();
+  const zerar = page.getByRole("button", { name: "Zerar saldos" });
+  await expect(zerar).toBeDisabled();
+  await page.getByLabel(/Para confirmar, digite ZERAR/).fill("zerar");
+  await expect(zerar).toBeDisabled(); // tem que ser exatamente ZERAR
+  await page.getByLabel(/Para confirmar, digite ZERAR/).fill("ZERAR");
+  await zerar.click();
+
+  const toast = page.getByRole("status");
+  await expect(toast).toContainText("Saldos zerados");
+
+  // Desfazer em lote (o aviso fica 10 segundos na própria tela de Ajustes)
+  await toast.getByRole("button", { name: "Desfazer" }).click();
+  await expect(toast).toContainText("Desfeito.");
+  await page.getByRole("link", { name: "Metas" }).click();
+  await expect(main(page)).toContainText("€350 guardados");
+
+  // Zerar de novo e ficar: tudo em €0, mas nomes, alvos e prioridades continuam
+  await page.getByRole("link", { name: "Ajustes" }).click();
+  await page.getByRole("button", { name: "Recomeçar saldos" }).click();
+  await page.getByLabel(/Para confirmar, digite ZERAR/).fill("ZERAR");
+  await page.getByRole("button", { name: "Zerar saldos" }).click();
+  await expect(page.getByRole("status")).toContainText("Saldos zerados");
+  await page.getByRole("link", { name: "Metas" }).click();
+  await expect(main(page)).toContainText("€0 guardados");
+  await expect(main(page)).toContainText("Viagem");
+  await expect(main(page)).toContainText("Reserva");
+});
