@@ -67,9 +67,11 @@ test("jornada completa: onboarding → recebi → gastei → metas → ajustes �
 
   // Ajustes: nome aparece no Início
   await page.getByRole("link", { name: "Ajustes" }).click();
-  await page.getByLabel("Seu nome").fill("Teste");
+  await page.getByLabel("Nome", { exact: true }).fill("Teste");
+  await page.getByRole("button", { name: "Salvar nome" }).click();
+  await expect(page.getByText("✓ Nome salvo")).toBeVisible();
   await page.getByLabel("A semana começa em").selectOption("0");
-  await page.getByRole("button", { name: "Salvar" }).click();
+  await page.getByRole("button", { name: "Salvar", exact: true }).click();
   await expect(page.getByText("✓ Ajustes salvos")).toBeVisible();
   await page.getByRole("link", { name: "Início" }).click();
   await expect(page.getByRole("heading", { name: "Olá, Teste" })).toBeVisible();

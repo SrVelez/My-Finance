@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AccountSection } from "@/components/AccountSection";
 import { ResetBalances } from "@/components/ResetBalances";
 import { Button } from "@/components/ui/Button";
 import { FormError } from "@/components/ui/FormError";
@@ -12,10 +13,15 @@ const DAYS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quint
 
 export function SettingsForm({
   initial,
+  email,
+  googleEnabled,
 }: {
   initial: { name: string; weeklyLivingCents: number; weekStartDay: number };
+  email: string;
+  googleEnabled: boolean;
 }) {
-  const [name, setName] = useState(initial.name);
+  // O nome se edita em "Conta"; aqui ele só acompanha o salvamento das outras configurações.
+  const name = initial.name;
   const [weekly, setWeekly] = useState(initial.weeklyLivingCents);
   const [weekStartDay, setWeekStartDay] = useState(initial.weekStartDay);
   const [saved, setSaved] = useState(false);
@@ -27,18 +33,6 @@ export function SettingsForm({
       <h1 className="font-display text-3xl font-extrabold">Ajustes</h1>
 
       <section className="space-y-4 rounded-card border border-line bg-surface p-4">
-        <label className="block text-xs text-muted">
-          Seu nome
-          <input
-            value={name}
-            maxLength={40}
-            onChange={(e) => {
-              setName(e.target.value);
-              setSaved(false);
-            }}
-            className="mt-1 min-h-12 w-full rounded-xl border border-line bg-canvas px-3 text-base font-semibold text-ink"
-          />
-        </label>
         <div className="text-xs text-muted">
           Gasto semanal (dia a dia)
           <MoneyField
@@ -109,6 +103,8 @@ export function SettingsForm({
           </Button>
         )}
       </section>
+
+      <AccountSection name={initial.name} email={email} googleEnabled={googleEnabled} />
 
       {error && <FormError center>{error}</FormError>}
     </main>

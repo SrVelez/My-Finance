@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { enabledProviders } from "@/lib/auth/providers";
 import { requirePageUser } from "@/lib/auth/session";
 import { getUser } from "@/lib/services/user";
 import { SettingsForm } from "./SettingsForm";
@@ -17,6 +18,8 @@ async function Ajustes() {
   return (
     <SettingsForm
       initial={{ name: user.name, weeklyLivingCents: user.weeklyLivingCents, weekStartDay: user.weekStartDay }}
+      email={user.email}
+      googleEnabled={enabledProviders.google}
     />
   );
 }

@@ -23,6 +23,7 @@ export default defineConfig({
       EMAIL_TRANSPORT: "file",
       EMAIL_FILE: path.resolve(".otp-e2e", "outbox.jsonl"),
       AUTH_RATE_LIMIT: "off",
+      AUTH_OTP_MIN_GAP_SECONDS: "0",
     },
     reuseExistingServer: false,
     timeout: 300_000,

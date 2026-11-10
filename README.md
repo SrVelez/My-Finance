@@ -10,13 +10,14 @@ Requisitos: Node 22+.
 
 ```bash
 npm install
-echo 'DATABASE_URL="file:./dev.db"' > .env   # banco SQLite (fica em prisma/dev.db)
-npm run db:push                               # cria as tabelas
-npm run db:seed                               # opcional: dados de exemplo (apaga o usuário atual!)
-npm run dev                                   # http://localhost:3000
+cp .env.example .env     # preencha DATABASE_URL e BETTER_AUTH_SECRET (veja "Login e contas")
+npm run db:push          # cria as tabelas (banco SQLite em prisma/dev.db)
+npm run dev              # http://localhost:3000
 ```
 
-Sem o seed, o app abre direto no onboarding. Depois de instalar, o `postinstall` gera o Prisma Client.
+O app agora exige **login**: quem não está logado vê as Boas-vindas, faz o onboarding sem cadastro e só então salva o plano numa conta. Em desenvolvimento o código de login **aparece no terminal** do `npm run dev` (não precisa de e-mail nem de Google). Depois de instalar, o `postinstall` gera o Prisma Client.
+
+> `npm run db:seed` e `db:seed:resumo` criam dados de exemplo para o usuário "legado" e **apagam os usuários existentes**: use `DATABASE_URL=file:./demo.db`.
 
 | Script | O que faz |
 | --- | --- |
@@ -26,10 +27,46 @@ Sem o seed, o app abre direto no onboarding. Depois de instalar, o `postinstall`
 | `npm run e2e` | testes ponta a ponta (Playwright, Chromium mobile) |
 | `npm run lint` | ESLint |
 | `npm run db:push` / `db:seed` | aplica o schema / popula com o estado de exemplo |
+| `npm run db:prepare-login` | prepara um banco criado ANTES do login (veja "Dados de antes do login") |
+| `npm run claim-legacy -- --email voce@email.com` | transfere os dados de antes do login para a sua conta |
 
 Na primeira vez: `npx playwright install chromium`.
 
 Os testes e2e rodam uma **build de produção** em outro diretório (`.next-e2e`), na porta 3100 e com banco próprio (`prisma/e2e.db`), então não interferem em um `npm run dev` aberto nem nos seus dados.
+
+## Login e contas
+
+Cada pessoa tem os **seus próprios dados** (contas fixas, metas, transações, ajustes e configurações) e nunca vê nem altera os de outra. Entrar é **sem senha**: código de 6 dígitos por e-mail (vale 10 minutos, 5 tentativas), Google e, opcionalmente, passkey (Face ID/digital). O Apple está pronto, mas desligado.
+
+### Variáveis de ambiente (`.env`; modelo em `.env.example`)
+
+| Variável | Para quê | Como obter |
+| --- | --- | --- |
+| `DATABASE_URL` | banco SQLite | `file:./dev.db` |
+| `BETTER_AUTH_SECRET` | assina as sessões (obrigatória em produção) | `openssl rand -base64 32` (ou `npx @better-auth/cli secret`) |
+| `BETTER_AUTH_URL` | endereço público do app (cookies, passkeys) | local: `http://localhost:3000`; produção: `https://seu-dominio.com` (em https os cookies saem com `Secure`) |
+| `AUTH_TRUSTED_ORIGINS` | outras origens aceitas, separadas por vírgula | opcional: o IP da rede para abrir no celular, ex. `http://192.168.0.10:3000` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | "Continuar com Google" | [Google Cloud Console](https://console.cloud.google.com) → APIs e serviços → Credenciais → ID do cliente OAuth ("Aplicativo da Web"), com o URI de redirecionamento `<BETTER_AUTH_URL>/api/auth/callback/google`. Sem elas, o botão não aparece |
+| `AUTH_APPLE_ENABLED` / `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET` | "Continuar com Apple" | **desligado** (`false`). Exige conta Apple Developer (paga): Services ID e segredo JWT. Para ligar: `AUTH_APPLE_ENABLED=true` |
+| `RESEND_API_KEY` / `EMAIL_FROM` | envio do código em **produção** | [resend.com](https://resend.com) → API Keys; `EMAIL_FROM` precisa ser de um domínio verificado lá |
+
+Sem `RESEND_API_KEY`, o código só aparece no terminal (desenvolvimento). Os testes e2e usam variáveis próprias (`EMAIL_TRANSPORT=file`, `AUTH_RATE_LIMIT=off`, `AUTH_OTP_MIN_GAP_SECONDS=0`), definidas no `playwright.config.ts` — **nunca use essas em produção**.
+
+### Como o isolamento funciona
+
+- O `userId` vem **sempre da sessão no servidor** (`requireUser()` em `lib/auth/session.ts`), nunca do corpo da requisição, da URL ou do cliente.
+- **Só `lib/services` e `lib/auth` falam com o Prisma** (regra de lint `no-restricted-imports`). Toda função de serviço recebe o `userId` e filtra por ele em todo `where`, inclusive em `update`/`delete`. Registro de outra pessoa = "não encontrado" (404, nunca 403).
+- O `proxy.ts` (Next 16) só faz um redirecionamento rápido por cookie; **cada página, ação e rota valida a sessão de verdade**.
+- `tests/isolation.test.ts` cria dois usuários e confirma que B nunca lê nem altera dados de A em cada operação.
+
+### Dados de antes do login (usuário "legado")
+
+Se você já usava o app antes do login, seus dados estão num usuário único. Para não perdê-los:
+
+1. **Faça uma cópia do banco** (`prisma/dev.db`).
+2. `npm run db:prepare-login` (dá a esse usuário o e-mail provisório `legado@financa.local`; é seguro rodar de novo) e depois `npm run db:push`.
+3. Suba o app (`npm run dev`), **entre uma vez** com o seu e-mail (a conta nova nasce vazia).
+4. `npm run claim-legacy -- --email voce@email.com` transfere tudo para essa conta e apaga o usuário legado. O comando recusa transferir para uma conta que já tem plano (nunca mistura dados).
 
 ## Como funciona
 
@@ -48,12 +85,15 @@ Valores são sempre **centavos inteiros**. Os números das telas de referência 
 
 ```
 app/
-  onboarding/        4 passos (rascunho no cliente; só "Começar a usar" grava)
-  (app)/             Início, Contas, Metas, Ajustes (+ navegação inferior)
+  bem-vindo/ entrar/ Boas-vindas e "Salve seu plano / Entrar" (código, nome, passkey)
+  onboarding/        4 passos sem login (rascunho no aparelho; só vira dados da conta depois do login)
+  (app)/             Início, Contas, Metas, Resumo, Ajustes (+ Conta) e navegação inferior
   receber/ gastar/   fluxos de tela cheia
+  api/               auth (Better Auth), dashboard, onboarding/claim, account/export
 lib/
   engine/            motor PURO (sem UI/banco): distribute, bills, goals, dates
-  services/          camada de operações (o chat da V2 deve chamar estas funções)
+  auth/              Better Auth, sessão (requireUser), e-mail do código, limite por e-mail
+  services/          camada de operações (o chat da V2 deve chamar estas funções); único lugar com o Prisma
   money.ts amount.ts formatação e entrada de valores
 prisma/              schema SQLite e seed
 tests/ e2e/          Vitest e Playwright

@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 /** No máximo 5 códigos por e-mail a cada 10 minutos, e pelo menos 30 s entre um e outro. */
 export const OTP_SEND_WINDOW_MS = 10 * 60_000;
 export const OTP_SEND_MAX = 5;
-export const OTP_SEND_MIN_GAP_MS = 30_000;
+/** Só os testes e2e (várias entradas seguidas com o mesmo e-mail) mudam isto: AUTH_OTP_MIN_GAP_SECONDS=0. */
+export const OTP_SEND_MIN_GAP_MS = Number(process.env.AUTH_OTP_MIN_GAP_SECONDS ?? 30) * 1000;
 
 /**
  * Limite de envios de código POR E-MAIL (o Better Auth só limita por IP). Registra o envio quando
