@@ -24,6 +24,8 @@ export function emailTransport(): EmailTransport {
 }
 
 /** Entrar por código só faz sentido se o e-mail realmente puder ser enviado (o campo some se não puder). */
-export const emailLoginEnabled = emailTransport() !== "resend" || (!!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM);
+export const emailLoginEnabled =
+  process.env.AUTH_EMAIL_LOGIN !== "false" && // `AUTH_EMAIL_LOGIN=false` esconde o e-mail em qualquer ambiente
+  (emailTransport() !== "resend" || (!!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM));
 
 export const enabledProviders = { google: !!googleConfig, apple: !!appleConfig, email: emailLoginEnabled };
