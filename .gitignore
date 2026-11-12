@@ -52,3 +52,6 @@ next-env.d.ts
 # códigos de login de desenvolvimento/testes
 /.otp/
 /.otp-e2e/
+
+# schema gerado para Postgres (scripts/prisma-setup.mjs)
+/prisma/schema.postgres.prisma

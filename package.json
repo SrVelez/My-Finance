@@ -9,12 +9,13 @@
     "lint": "eslint",
     "test": "vitest run",
     "e2e": "playwright test",
-    "db:push": "prisma db push",
+    "db:push": "node scripts/prisma-setup.mjs push",
     "db:prepare-login": "tsx prisma/prepare-login.ts",
     "claim-legacy": "tsx scripts/claim-legacy.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:resumo": "tsx prisma/seed-dashboard.ts",
-    "postinstall": "prisma generate"
+    "vercel-build": "node scripts/prisma-setup.mjs push && next build",
+    "postinstall": "node scripts/prisma-setup.mjs generate"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.19",

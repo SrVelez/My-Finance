@@ -9,11 +9,22 @@ import { appleConfig, googleConfig } from "./providers";
 import { allowOtpSend } from "./throttle";
 
 /** Endereço público do app (cookies, passkeys e links). Em produção, o https:// do domínio. */
-const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+// Na Vercel, sem BETTER_AUTH_URL, usa o domínio de produção do projeto.
+const baseURL =
+  process.env.BETTER_AUTH_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
 const isHttps = baseURL.startsWith("https://");
 
 /** Origens extras aceitas (ex.: o IP da rede local para abrir o app no celular), separadas por vírgula. */
-const trustedOrigins = [baseURL, ...(process.env.AUTH_TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean)];
+const trustedOrigins = [
+  baseURL,
+  // Na Vercel, o endereço de cada deploy (previews) também é aceito.
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+  ...(process.env.AUTH_TRUSTED_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean),
+];
+
+/** O banco é Postgres (Vercel/Neon) ou SQLite (computador, testes): o adaptador precisa saber qual. */
+const databaseProvider = /^postgres(ql)?:/i.test(process.env.DATABASE_URL ?? "") ? "postgresql" : "sqlite";
 
 export const auth = betterAuth({
   appName: "Finança",
@@ -22,7 +33,7 @@ export const auth = betterAuth({
   secret:
     process.env.BETTER_AUTH_SECRET ??
     (process.env.NODE_ENV === "production" ? undefined : "financa-dev-secret-troque-em-producao-0123456789"),
-  database: prismaAdapter(db, { provider: "sqlite" }),
+  database: prismaAdapter(db, { provider: databaseProvider }),
   trustedOrigins,
 
   // Sessão: cookie HttpOnly + SameSite=Lax (+ Secure em https), 60 dias, renovada a cada uso diário.

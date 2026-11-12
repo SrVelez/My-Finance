@@ -68,6 +68,27 @@ Se você já usava o app antes do login, seus dados estão num usuário único. 
 3. Suba o app (`npm run dev`), **entre uma vez** com o seu e-mail (a conta nova nasce vazia).
 4. `npm run claim-legacy -- --email voce@email.com` transfere tudo para essa conta e apaga o usuário legado. O comando recusa transferir para uma conta que já tem plano (nunca mistura dados).
 
+## Publicar na Vercel (Postgres)
+
+O SQLite é só do seu computador (desenvolvimento, testes e e2e): na Vercel o disco é descartável e somente leitura. Por isso, **na Vercel o banco precisa ser um Postgres hospedado** (Neon, Supabase, Vercel Postgres…). O código é o mesmo: o script `scripts/prisma-setup.mjs` olha o `DATABASE_URL` e, se for `postgres://…`, gera o cliente e as tabelas com `provider = "postgresql"` (numa cópia ignorada pelo git, sem mexer no `schema.prisma`).
+
+1. Crie o banco (ex.: [neon.tech](https://neon.tech), plano gratuito) e copie as duas strings de conexão: a **pooled** (para o app) e a **direta** (para criar tabelas).
+2. Na Vercel → Project → Settings → **Environment Variables**, defina (Production e Preview):
+
+| Variável | Valor |
+| --- | --- |
+| `DATABASE_URL` | string de conexão do Postgres (a *pooled*, com `?sslmode=require`) |
+| `DIRECT_URL` | string de conexão **direta** (usada só para criar/atualizar as tabelas no deploy; opcional se só existir uma) |
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
+| `BETTER_AUTH_URL` | `https://seu-projeto.vercel.app` (sem barra no final). Se faltar, usa o domínio de produção da Vercel |
+| `RESEND_API_KEY` e `EMAIL_FROM` | envio do código de login (veja a tabela de login acima). Sem eles **nenhum e-mail é enviado** |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | opcionais; o redirecionamento no Google Cloud é `https://seu-projeto.vercel.app/api/auth/callback/google` |
+
+3. Faça o deploy. O comando `vercel-build` roda `prisma db push` (só cria/adiciona; nunca apaga dados sozinho) e depois `next build`.
+4. Para trabalhar **localmente contra o Postgres** (opcional): coloque a string no `.env`, rode `npm run db:push` e `npx prisma generate` — o script detecta o Postgres. Volte o `DATABASE_URL` para `file:./dev.db` para os testes (`npm test`, `npm run e2e`), que usam SQLite.
+
+> Resend: sem domínio verificado, ele só entrega para o e-mail do dono da conta Resend. Para qualquer pessoa receber o código, verifique um domínio em resend.com/domains e use um `EMAIL_FROM` desse domínio.
+
 ## Como funciona
 
 **Conta fixa ≠ Gasto semanal ≠ Meta ≠ Transação.** A cada recebimento o motor aplica uma ordem fixa:
