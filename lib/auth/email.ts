@@ -1,19 +1,13 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { emailTransport } from "./providers";
 
 /** Minutos de validade do código (o mesmo número vai no texto do e-mail e na configuração do Better Auth). */
 export const OTP_MINUTES = 10;
 
-export type EmailTransport = "console" | "file" | "memory" | "resend";
 
 /** Envios "guardados" quando o transporte é `memory` (testes automatizados). */
 export const outbox: { email: string; code: string }[] = [];
-
-function transport(): EmailTransport {
-  const t = process.env.EMAIL_TRANSPORT;
-  if (t === "console" || t === "file" || t === "memory" || t === "resend") return t;
-  return process.env.NODE_ENV === "production" ? "resend" : "console";
-}
 
 /** Texto do e-mail, em português e curto. */
 export const otpEmailText = (code: string) => `Seu código do Finança é ${code}. Ele vale por ${OTP_MINUTES} minutos.`;
@@ -25,7 +19,7 @@ export const otpEmailText = (code: string) => `Seu código do Finança é ${code
  * - `EMAIL_TRANSPORT=file|memory`: só para testes automatizados (o código vai para um arquivo ou para `outbox`).
  */
 export async function sendOtpEmail(email: string, code: string): Promise<void> {
-  switch (transport()) {
+  switch (emailTransport()) {
     case "console":
       console.log(`\n[Finança] Código de login para ${email}: ${code}\n`);
       return;

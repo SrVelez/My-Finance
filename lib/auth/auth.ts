@@ -5,7 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "@/lib/db";
 import { OTP_MINUTES, sendOtpEmail } from "./email";
-import { appleConfig, googleConfig } from "./providers";
+import { appleConfig, emailLoginEnabled, googleConfig } from "./providers";
 import { allowOtpSend } from "./throttle";
 
 /** Endereço público do app (cookies, passkeys e links). Em produção, o https:// do domínio. */
@@ -67,7 +67,7 @@ export const auth = betterAuth({
       rateLimit: { window: 60, max: 10 },
       // Mesma tela para entrar e criar conta: e-mail novo cria a conta ao confirmar o código.
       async sendVerificationOTP({ email, otp, type }) {
-        if (type !== "sign-in") return;
+        if (type !== "sign-in" || !emailLoginEnabled) return; // sem envio configurado, nada é enviado
         // Não aguardamos o envio (evita ataque por tempo) e nunca revelamos se foi negado/enviado.
         if (!(await allowOtpSend(email))) return;
         void sendOtpEmail(email, otp).catch((e) => console.error("[Finança] Falha ao enviar o código:", e));

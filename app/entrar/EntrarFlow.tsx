@@ -41,7 +41,7 @@ interface Props {
   plano: boolean;
   /** Acabou de entrar (voltou do Google): pode pedir nome e oferecer passkey. */
   voltouDoLogin: boolean;
-  providers: { google: boolean; apple: boolean };
+  providers: { google: boolean; apple: boolean; email: boolean };
 }
 
 export function EntrarFlow({ loggedIn, plano, voltouDoLogin, providers }: Props) {
@@ -205,13 +205,19 @@ export function EntrarFlow({ loggedIn, plano, voltouDoLogin, providers }: Props)
                   Continuar com Apple
                 </Button>
               )}
-              {(providers.google || providers.apple) && (
+              {providers.email && (providers.google || providers.apple) && (
                 <div className="flex items-center gap-3 text-xs text-muted" role="separator">
                   <span className="h-px flex-1 bg-line" />
                   ou
                   <span className="h-px flex-1 bg-line" />
                 </div>
               )}
+              {!providers.google && !providers.apple && !providers.email && (
+                <p role="alert" className="rounded-card bg-warn-bg p-3 text-sm text-warn-ink">
+                  Entrar não está disponível agora. Tente de novo mais tarde.
+                </p>
+              )}
+              {providers.email && (
               <form onSubmit={pedirCodigo} noValidate className="space-y-3">
                 <label className="block text-xs text-muted">
                   E-mail
@@ -231,6 +237,7 @@ export function EntrarFlow({ loggedIn, plano, voltouDoLogin, providers }: Props)
                   {ocupado ? "Enviando…" : "Continuar com e-mail"}
                 </Button>
               </form>
+              )}
             </div>
             <p className="text-xs text-muted">
               Ao continuar, você concorda com os{" "}

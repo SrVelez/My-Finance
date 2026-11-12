@@ -50,7 +50,7 @@ Cada pessoa tem os **seus próprios dados** (contas fixas, metas, transações, 
 | `AUTH_APPLE_ENABLED` / `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET` | "Continuar com Apple" | **desligado** (`false`). Exige conta Apple Developer (paga): Services ID e segredo JWT. Para ligar: `AUTH_APPLE_ENABLED=true` |
 | `RESEND_API_KEY` / `EMAIL_FROM` | envio do código em **produção** | [resend.com](https://resend.com) → API Keys; `EMAIL_FROM` precisa ser de um domínio verificado lá |
 
-Sem `RESEND_API_KEY`, o código só aparece no terminal (desenvolvimento). Os testes e2e usam variáveis próprias (`EMAIL_TRANSPORT=file`, `AUTH_RATE_LIMIT=off`, `AUTH_OTP_MIN_GAP_SECONDS=0`), definidas no `playwright.config.ts` — **nunca use essas em produção**.
+Sem `RESEND_API_KEY` e `EMAIL_FROM`, o código só aparece no terminal (desenvolvimento) e, **em produção, o campo de e-mail some da tela de entrada**: sobra só "Continuar com Google" (basta preencher `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`, de graça). Os testes e2e usam variáveis próprias (`EMAIL_TRANSPORT=file`, `AUTH_RATE_LIMIT=off`, `AUTH_OTP_MIN_GAP_SECONDS=0`), definidas no `playwright.config.ts` — **nunca use essas em produção**.
 
 ### Como o isolamento funciona
 

@@ -11,4 +11,19 @@ export const appleConfig =
     : undefined;
 
 /** Quais "Continuar com…" aparecem na tela de entrada. */
-export const enabledProviders = { google: !!googleConfig, apple: !!appleConfig };
+export type EmailTransport = "console" | "file" | "memory" | "resend";
+
+/**
+ * Como o código de login é enviado: desenvolvimento imprime no terminal; produção usa o Resend.
+ * `EMAIL_TRANSPORT=file|memory` existe só para testes automatizados.
+ */
+export function emailTransport(): EmailTransport {
+  const t = process.env.EMAIL_TRANSPORT;
+  if (t === "console" || t === "file" || t === "memory" || t === "resend") return t;
+  return process.env.NODE_ENV === "production" ? "resend" : "console";
+}
+
+/** Entrar por código só faz sentido se o e-mail realmente puder ser enviado (o campo some se não puder). */
+export const emailLoginEnabled = emailTransport() !== "resend" || (!!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM);
+
+export const enabledProviders = { google: !!googleConfig, apple: !!appleConfig, email: emailLoginEnabled };
